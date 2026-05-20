@@ -373,7 +373,7 @@
         </form>
 
         <p class="toggle-text">
-          Don't have an account? <a href="#" onclick="showRegister(); return false;">Sign up</a>
+          Don't have an account? <a href="#" id="show-register-link">Sign up</a>
         </p>
 
         <div class="links">
@@ -405,7 +405,7 @@
         </form>
 
         <p class="toggle-text">
-          Already have an account? <a href="#" onclick="showLogin(); return false;">Sign in</a>
+          Already have an account? <a href="#" id="show-login-link">Sign in</a>
         </p>
       </div>
     </div>
@@ -429,6 +429,10 @@
       document.getElementById('register-card').style.display = 'block';
       document.getElementById('page-title').textContent = 'Create your account';
     }
+
+    // CSP script-src-attr 'none' 対応: inline onclick を addEventListener に移行
+    document.getElementById('show-register-link').addEventListener('click', (e) => { e.preventDefault(); showRegister(); });
+    document.getElementById('show-login-link').addEventListener('click', (e) => { e.preventDefault(); showLogin(); });
 
     function showError(message, isRegister = false) {
       const el = document.getElementById(isRegister ? 'register-error' : 'login-error');
