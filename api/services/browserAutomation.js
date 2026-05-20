@@ -21,6 +21,43 @@ puppeteer.use(StealthPlugin());
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const randomDelay = (min = 1000, max = 3000) => sleep(min + Math.random() * (max - min));
 
+function cleanUsername(username = '') {
+  return String(username).trim().replace(/^@/, '').replace(/[^a-zA-Z0-9_]/g, '');
+}
+
+function parseSessionCookies(sessionCookie) {
+  if (!sessionCookie) return [];
+
+  const raw = String(sessionCookie).trim();
+  const pairs = raw.includes('=')
+    ? raw.split(';').map((part) => part.trim()).filter(Boolean)
+    : [`auth_token=${raw}`];
+
+  const cookies = [];
+  for (const pair of pairs) {
+    const eq = pair.indexOf('=');
+    if (eq <= 0) continue;
+
+    const name = pair.slice(0, eq).trim();
+    const value = pair.slice(eq + 1).trim();
+    if (!name || !value || !/^[A-Za-z0-9_.$-]+$/.test(name)) continue;
+
+    const base = {
+      name,
+      value,
+      domain: '.x.com',
+      path: '/',
+      secure: true,
+      httpOnly: name === 'auth_token',
+      sameSite: 'Lax',
+    };
+
+    cookies.push(base);
+  }
+
+  return cookies;
+}
+
 // Browser instance management (singleton)
 let browserInstance = null;
 
@@ -75,16 +112,9 @@ async function getAuthenticatedPage(sessionCookie) {
     'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
   );
 
-  // Set session cookie if provided
-  if (sessionCookie) {
-    await page.setCookie({
-      name: 'auth_token',
-      value: sessionCookie,
-      domain: '.x.com',
-      path: '/',
-      httpOnly: true,
-      secure: true,
-    });
+  const cookies = parseSessionCookies(sessionCookie);
+  if (cookies.length > 0) {
+    await page.setCookie(...cookies);
   }
 
   return page;
@@ -999,6 +1029,297 @@ class BrowserAutomation {
 
   async createPage(sessionCookie) {
     return getAuthenticatedPage(sessionCookie);
+  }
+
+  async navigateToTwitter(page, url = 'https://x.com/home') {
+    await page.goto(url, { waitUntil: 'networkidle2', timeout: 60000 });
+    await randomDelay(1200, 2200);
+    return page;
+  }
+
+  async checkAuthentication(page) {
+    if (!page.url().includes('x.com')) {
+      await this.navigateToTwitter(page);
+    }
+
+    await page.waitForSelector('body', { timeout: 15000 }).catch(() => null);
+
+    return page.evaluate(() => {
+      const path = window.location.pathname;
+      if (path.includes('/login') || path.includes('/i/flow/login')) return false;
+      if (document.querySelector('input[name="text"], input[autocomplete="username"]')) return false;
+
+      return Boolean(
+        document.querySelector('[data-testid="primaryColumn"]') ||
+        document.querySelector('[data-testid="SideNav_AccountSwitcher_Button"]') ||
+        document.querySelector('a[href="/home"]') ||
+        document.querySelector('a[data-testid="AppTabBar_Home_Link"]')
+      );
+    });
+  }
+
+  async getUserTweets(page, username, limit = 10) {
+    const clean = cleanUsername(username);
+    if (!clean) throw new Error('Target username is required');
+
+    await this.navigateToTwitter(page, `https://x.com/${clean}`);
+
+    const tweets = new Map();
+    let scrolls = 0;
+    const maxScrolls = Math.max(2, Math.ceil(limit / 4) + 2);
+
+    while (tweets.size < limit && scrolls < maxScrolls) {
+      const batch = await page.evaluate((targetUsername) => {
+        return Array.from(document.querySelectorAll('article[data-testid="tweet"]'))
+          .map((article) => {
+            const link = article.querySelector('a[href*="/status/"]');
+            const url = link?.href || '';
+            const id = url.match(/status\/(\d+)/)?.[1] || null;
+            const authorLink = article.querySelector('[data-testid="User-Name"] a[href^="/"]');
+            const author = authorLink?.getAttribute('href')?.split('/')[1] || targetUsername;
+            const text = article.querySelector('[data-testid="tweetText"]')?.textContent || '';
+
+            return { id, url, username: author, text };
+          })
+          .filter((tweet) => tweet.id && tweet.url && tweet.username.toLowerCase() === targetUsername.toLowerCase());
+      }, clean);
+
+      for (const tweet of batch) {
+        tweets.set(tweet.id, tweet);
+      }
+
+      if (tweets.size >= limit) break;
+      await page.evaluate(() => window.scrollBy(0, Math.floor(window.innerHeight * 0.9)));
+      await randomDelay(1200, 2200);
+      scrolls++;
+    }
+
+    return Array.from(tweets.values()).slice(0, limit);
+  }
+
+  async searchTweets(page, query, limit = 20) {
+    if (!query) throw new Error('Search query is required');
+
+    await this.navigateToTwitter(
+      page,
+      `https://x.com/search?q=${encodeURIComponent(query)}&src=typed_query&f=live`
+    );
+
+    const tweets = new Map();
+    let scrolls = 0;
+    const maxScrolls = Math.max(2, Math.ceil(limit / 5) + 2);
+
+    while (tweets.size < limit && scrolls < maxScrolls) {
+      const batch = await page.evaluate(() => {
+        return Array.from(document.querySelectorAll('article[data-testid="tweet"]'))
+          .map((article) => {
+            const link = article.querySelector('a[href*="/status/"]');
+            const url = link?.href || '';
+            const id = url.match(/status\/(\d+)/)?.[1] || null;
+            const authorLink = article.querySelector('[data-testid="User-Name"] a[href^="/"]');
+            const username = authorLink?.getAttribute('href')?.split('/')[1] || null;
+            const text = article.querySelector('[data-testid="tweetText"]')?.textContent || '';
+
+            return { id, url, username, text };
+          })
+          .filter((tweet) => tweet.id && tweet.url);
+      });
+
+      for (const tweet of batch) {
+        tweets.set(tweet.id, tweet);
+      }
+
+      if (tweets.size >= limit) break;
+      await page.evaluate(() => window.scrollBy(0, Math.floor(window.innerHeight * 0.9)));
+      await randomDelay(1200, 2200);
+      scrolls++;
+    }
+
+    return Array.from(tweets.values()).slice(0, limit);
+  }
+
+  async likePost(page, tweetUrl) {
+    if (!tweetUrl) throw new Error('tweetUrl is required');
+
+    await this.navigateToTwitter(page, tweetUrl);
+
+    const alreadyLiked = await page.$('[data-testid="unlike"]');
+    if (alreadyLiked) {
+      return { success: true, alreadyLiked: true, url: tweetUrl };
+    }
+
+    const likeButton = await page.waitForSelector('[data-testid="like"]', { timeout: 15000 }).catch(() => null);
+    if (!likeButton) {
+      return { success: false, error: 'Like button not found', url: tweetUrl };
+    }
+
+    await likeButton.click();
+    await randomDelay(1000, 1800);
+
+    return { success: true, liked: true, url: tweetUrl };
+  }
+
+  async unlikePost(page, tweetUrl) {
+    if (!tweetUrl) throw new Error('tweetUrl is required');
+
+    await this.navigateToTwitter(page, tweetUrl);
+
+    const unlikeButton = await page.$('[data-testid="unlike"]');
+    if (!unlikeButton) {
+      return { success: true, alreadyUnliked: true, url: tweetUrl };
+    }
+
+    await unlikeButton.click();
+    await randomDelay(1000, 1800);
+
+    return { success: true, unliked: true, url: tweetUrl };
+  }
+
+  async followUser(page, username) {
+    const clean = cleanUsername(username);
+    if (!clean) throw new Error('Target username is required');
+
+    await this.navigateToTwitter(page, `https://x.com/${clean}`);
+
+    const result = await page.evaluate(() => {
+      const alreadyFollowing = document.querySelector('[data-testid$="-unfollow"]');
+      if (alreadyFollowing) {
+        return { success: true, alreadyFollowing: true };
+      }
+
+      const buttons = Array.from(document.querySelectorAll('button'));
+      const followButton = buttons.find((button) => {
+        const testId = button.getAttribute('data-testid') || '';
+        const label = button.getAttribute('aria-label') || '';
+        const text = button.textContent || '';
+        return (
+          (testId.endsWith('-follow') && !testId.endsWith('-unfollow')) ||
+          /^Follow\b/i.test(text.trim()) ||
+          /^Follow @/i.test(label)
+        );
+      });
+
+      if (!followButton) {
+        return { success: false, error: 'Follow button not found' };
+      }
+
+      followButton.click();
+      return { success: true, followed: true };
+    });
+
+    await randomDelay(1200, 2200);
+    return { username: clean, ...result };
+  }
+
+  async sendDM(page, username, message) {
+    const clean = cleanUsername(username);
+    const text = String(message || '').trim();
+    if (!clean) throw new Error('Target username is required');
+    if (!text) throw new Error('DM message is required');
+
+    await this.navigateToTwitter(page, 'https://x.com/messages/compose');
+
+    const searchInput = await page.waitForSelector(
+      '[data-testid="searchPeople"], input[data-testid="SearchBox_Search_Input"], input[aria-label*="Search"]',
+      { timeout: 20000 }
+    ).catch(() => null);
+    if (!searchInput) {
+      return { success: false, username: clean, error: 'DM recipient search was not available' };
+    }
+
+    await searchInput.click({ clickCount: 3 });
+    await page.keyboard.type(clean, { delay: 35 });
+    await randomDelay(1500, 2500);
+
+    const selected = await page.evaluate((targetUsername) => {
+      const users = Array.from(document.querySelectorAll('[data-testid="TypeaheadUser"], [data-testid="UserCell"]'));
+      const target = users.find((user) => (user.textContent || '').toLowerCase().includes(`@${targetUsername.toLowerCase()}`)) || users[0];
+      if (!target) return false;
+      target.click();
+      return true;
+    }, clean);
+
+    if (!selected) {
+      return { success: false, username: clean, error: 'DM recipient was not found' };
+    }
+
+    await randomDelay(800, 1400);
+
+    const nextClicked = await page.evaluate(() => {
+      const buttons = Array.from(document.querySelectorAll('button'));
+      const next = buttons.find((button) => {
+        const testId = button.getAttribute('data-testid') || '';
+        const text = (button.textContent || '').trim();
+        return testId === 'nextButton' || /^Next$/i.test(text);
+      });
+      if (!next) return false;
+      next.click();
+      return true;
+    });
+
+    if (!nextClicked) {
+      return { success: false, username: clean, error: 'DM next button was not found' };
+    }
+
+    const input = await page.waitForSelector('[data-testid="dmComposerTextInput"]', { timeout: 20000 }).catch(() => null);
+    if (!input) {
+      return { success: false, username: clean, error: 'DM composer was not available' };
+    }
+
+    await input.click();
+    await page.keyboard.type(text, { delay: 20 });
+    await randomDelay(500, 1000);
+
+    const sendClicked = await page.evaluate(() => {
+      const send = document.querySelector('[data-testid="dmComposerSendButton"]');
+      if (!send) return false;
+      send.click();
+      return true;
+    });
+
+    if (!sendClicked) {
+      return { success: false, username: clean, error: 'DM send button was not available' };
+    }
+
+    await randomDelay(1200, 2200);
+    return { success: true, username: clean, sent: true };
+  }
+
+  async getTweetEngagers(page, tweetUrl, engagementType = 'likes', limit = 50) {
+    if (!tweetUrl) throw new Error('tweetUrl is required');
+
+    const suffix = engagementType === 'retweets' ? 'retweets' : 'likes';
+    const url = tweetUrl.replace(/\/$/, '') + `/${suffix}`;
+    await this.navigateToTwitter(page, url);
+
+    const users = new Map();
+    let scrolls = 0;
+    const maxScrolls = Math.max(3, Math.ceil(limit / 8) + 2);
+
+    while (users.size < limit && scrolls < maxScrolls) {
+      const batch = await page.evaluate(() => {
+        return Array.from(document.querySelectorAll('[data-testid="UserCell"]'))
+          .map((cell) => {
+            const link = cell.querySelector('a[href^="/"]');
+            const href = link?.getAttribute('href') || '';
+            const username = href.split('/')[1];
+            const displayName = cell.querySelector('[dir="ltr"] span')?.textContent || username;
+            return { username, displayName };
+          })
+          .filter((user) => user.username && !user.username.includes('?'));
+      });
+
+      for (const user of batch) {
+        users.set(user.username.toLowerCase(), user);
+      }
+
+      if (users.size >= limit) break;
+      await page.evaluate(() => window.scrollBy(0, Math.floor(window.innerHeight * 0.9)));
+      await randomDelay(1200, 2200);
+      scrolls++;
+    }
+
+    return Array.from(users.values()).slice(0, limit);
   }
 
   async close() {

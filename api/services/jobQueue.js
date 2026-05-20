@@ -16,6 +16,9 @@ import { autoLikeBrowser } from './operations/puppeteer/autoLike.js';
 import { followEngagersBrowser } from './operations/puppeteer/followEngagers.js';
 import { keywordFollowBrowser } from './operations/puppeteer/keywordFollow.js';
 import { autoCommentBrowser } from './operations/puppeteer/autoComment.js';
+import { targetEngageBrowser } from './operations/puppeteer/targetEngage.js';
+import browserAutomation from './browserAutomation.js';
+import { getDecryptedSessionCookie } from '../routes/session-auth.js';
 
 const prisma = new PrismaClient();
 
@@ -53,7 +56,7 @@ async function addJob(type, data, options = {}) {
       type,
       status: 'queued',
       userId: data.userId,
-      config: data.config || {},
+      config: toJsonString(data.config),
       createdAt: new Date()
     }
   });
@@ -79,8 +82,10 @@ async function addJob(type, data, options = {}) {
  * Queue job (legacy function for backward compatibility)
  */
 async function queueJob(jobData) {
+  const explicitJobId = jobData.operationId || jobData.id;
   const job = await operationsQueue.add(jobData.type, jobData, {
-    priority: jobData.priority || 10
+    priority: jobData.priority || 10,
+    ...(explicitJobId ? { jobId: explicitJobId } : {})
   });
   
   console.log(`📨 Job queued: ${job.id} (${jobData.type})`);
@@ -98,7 +103,26 @@ async function getJob(jobId) {
   });
 
   if (!operation) {
-    return null;
+    const bullJob = await operationsQueue.getJob(jobId);
+    if (!bullJob) return null;
+
+    const state = await bullJob.getState();
+    const progress = await bullJob.progress();
+
+    return {
+      id: jobId,
+      type: bullJob.data?.type,
+      status: state,
+      progress,
+      config: bullJob.data?.config || null,
+      result: bullJob.returnvalue || null,
+      error: bullJob.failedReason || null,
+      createdAt: bullJob.timestamp ? new Date(bullJob.timestamp) : null,
+      startedAt: bullJob.processedOn ? new Date(bullJob.processedOn) : null,
+      completedAt: bullJob.finishedOn ? new Date(bullJob.finishedOn) : null,
+      retryCount: bullJob.attemptsMade || 0,
+      cancelled: cancelledJobs.has(jobId)
+    };
   }
 
   // Get Bull job for live progress
@@ -154,6 +178,35 @@ async function getHistory(userId, limit = 50) {
   return operations;
 }
 
+async function getRecentJobs({ userId, limit = 50 } = {}) {
+  const effectiveLimit = Math.min(Math.max(parseInt(limit) || 50, 1), 100);
+
+  if (userId) {
+    return getHistory(userId, effectiveLimit);
+  }
+
+  const jobs = await operationsQueue.getJobs(
+    ['active', 'waiting', 'delayed', 'completed', 'failed'],
+    0,
+    effectiveLimit - 1,
+    false
+  );
+
+  return Promise.all(jobs.map(async (job) => ({
+    id: job.data?.operationId || job.data?.id || job.id,
+    type: job.data?.type,
+    status: await job.getState(),
+    progress: await job.progress(),
+    config: job.data?.config || null,
+    result: job.returnvalue || null,
+    error: job.failedReason || null,
+    createdAt: job.timestamp ? new Date(job.timestamp) : null,
+    startedAt: job.processedOn ? new Date(job.processedOn) : null,
+    completedAt: job.finishedOn ? new Date(job.finishedOn) : null,
+    retryCount: job.attemptsMade || 0
+  })));
+}
+
 /**
  * Cancel a running job
  * @param {string} jobId - The operation/job ID
@@ -161,11 +214,13 @@ async function getHistory(userId, limit = 50) {
 async function cancelJob(jobId) {
   // Mark as cancelled in memory (for long-running operations to check)
   cancelledJobs.add(jobId);
+  let found = false;
 
   // Try to remove from Bull queue if not yet started
   const bullJob = await operationsQueue.getJob(jobId);
   
   if (bullJob) {
+    found = true;
     const state = await bullJob.getState();
     
     if (state === 'waiting' || state === 'delayed') {
@@ -177,14 +232,26 @@ async function cancelJob(jobId) {
     }
   }
 
-  // Update database
-  await prisma.operation.update({
+  const operation = await prisma.operation.findUnique({
     where: { id: jobId },
-    data: {
-      status: 'cancelled',
-      completedAt: new Date()
-    }
+    select: { id: true }
   });
+
+  if (operation) {
+    found = true;
+    await prisma.operation.update({
+      where: { id: jobId },
+      data: {
+        status: 'cancelled',
+        completedAt: new Date()
+      }
+    });
+  }
+
+  if (!found) {
+    cancelledJobs.delete(jobId);
+    return null;
+  }
 
   return { success: true, jobId, message: 'Job cancelled' };
 }
@@ -208,15 +275,46 @@ function cleanupCancelledJobs() {
   }
 }
 
+function toJsonString(value) {
+  if (value === null || value === undefined) return null;
+  return typeof value === 'string' ? value : JSON.stringify(value);
+}
+
+async function resolveJobConfig(job) {
+  const config = job.data.config || {};
+
+  if (job.data.authMethod === 'session' || config.sessionCookie) {
+    const storedCookie = job.data.userId
+      ? await getDecryptedSessionCookie(job.data.userId).catch(() => null)
+      : null;
+
+    return {
+      ...config,
+      sessionCookie: storedCookie || config.sessionCookie,
+    };
+  }
+
+  return config;
+}
+
+function tweetUrlFromConfig(config) {
+  if (config.tweetUrl) return config.tweetUrl;
+  if (config.tweetId) return `https://x.com/i/status/${config.tweetId}`;
+  throw new Error('tweetId or tweetUrl is required');
+}
+
+const getJobStatus = getJob;
+
 // Process jobs - unfollowNonFollowers
 operationsQueue.process('unfollowNonFollowers', 2, async (job) => {
   console.log(`🔄 Processing job ${job.id}: unfollowNonFollowers`);
   
   // Check if browser automation or API
   if (job.data.authMethod === 'session') {
+    const config = await resolveJobConfig(job);
     return await unfollowNonFollowersBrowser(
       job.data.userId,
-      job.data.config,
+      config,
       (message) => job.progress(message),
       () => isJobCancelled(job.data.operationId)
     );
@@ -230,9 +328,10 @@ operationsQueue.process('unfollowEveryone', 2, async (job) => {
   console.log(`🔄 Processing job ${job.id}: unfollowEveryone`);
   
   if (job.data.authMethod === 'session') {
+    const config = await resolveJobConfig(job);
     return await unfollowEveryoneBrowser(
       job.data.userId,
-      job.data.config,
+      config,
       (message) => job.progress(message),
       () => isJobCancelled(job.data.operationId)
     );
@@ -246,9 +345,10 @@ operationsQueue.process('detectUnfollowers', 3, async (job) => {
   console.log(`🔄 Processing job ${job.id}: detectUnfollowers`);
   
   if (job.data.authMethod === 'session') {
+    const config = await resolveJobConfig(job);
     return await detectUnfollowersBrowser(
       job.data.userId,
-      job.data.config,
+      config,
       (message) => job.progress(message),
       () => isJobCancelled(job.data.operationId)
     );
@@ -262,9 +362,10 @@ operationsQueue.process('autoLike', 2, async (job) => {
   console.log(`🔄 Processing job ${job.id}: autoLike`);
   
   if (job.data.authMethod === 'session') {
+    const config = await resolveJobConfig(job);
     return await autoLikeBrowser(
       job.data.userId,
-      job.data.config,
+      config,
       (message) => job.progress(message),
       () => isJobCancelled(job.data.operationId)
     );
@@ -278,9 +379,10 @@ operationsQueue.process('followEngagers', 2, async (job) => {
   console.log(`🔄 Processing job ${job.id}: followEngagers`);
   
   if (job.data.authMethod === 'session') {
+    const config = await resolveJobConfig(job);
     return await followEngagersBrowser(
       job.data.userId,
-      job.data.config,
+      config,
       (message) => job.progress(message),
       () => isJobCancelled(job.data.operationId)
     );
@@ -294,9 +396,10 @@ operationsQueue.process('keywordFollow', 2, async (job) => {
   console.log(`🔄 Processing job ${job.id}: keywordFollow`);
   
   if (job.data.authMethod === 'session') {
+    const config = await resolveJobConfig(job);
     return await keywordFollowBrowser(
       job.data.userId,
-      job.data.config,
+      config,
       (message) => job.progress(message),
       () => isJobCancelled(job.data.operationId)
     );
@@ -310,9 +413,10 @@ operationsQueue.process('autoComment', 2, async (job) => {
   console.log(`🔄 Processing job ${job.id}: autoComment`);
   
   if (job.data.authMethod === 'session') {
+    const config = await resolveJobConfig(job);
     return await autoCommentBrowser(
       job.data.userId,
-      job.data.config,
+      config,
       (message) => job.progress(message),
       () => isJobCancelled(job.data.operationId)
     );
@@ -321,23 +425,103 @@ operationsQueue.process('autoComment', 2, async (job) => {
   return await processAutoComment(job.data, () => isJobCancelled(job.data.operationId));
 });
 
+// Process jobs - explicit target actions (like latest posts, follow, DM)
+operationsQueue.process('targetEngage', 1, async (job) => {
+  console.log(`🔄 Processing job ${job.id}: targetEngage`);
+
+  const config = await resolveJobConfig(job);
+  return await targetEngageBrowser(
+    job.data.userId,
+    config,
+    (message) => job.progress(message),
+    () => isJobCancelled(job.data.operationId)
+  );
+});
+
+// Process jobs - direct tweet engagement
+operationsQueue.process('likeTweet', 2, async (job) => {
+  console.log(`🔄 Processing job ${job.id}: likeTweet`);
+
+  const config = await resolveJobConfig(job);
+  const page = await browserAutomation.createPage(config.sessionCookie);
+
+  try {
+    await browserAutomation.navigateToTwitter(page);
+    const isAuthenticated = await browserAutomation.checkAuthentication(page);
+    if (!isAuthenticated) throw new Error('Session expired - please reconnect your X account');
+    return await browserAutomation.likePost(page, tweetUrlFromConfig(config));
+  } finally {
+    await page.close();
+  }
+});
+
+operationsQueue.process('unlikeTweet', 2, async (job) => {
+  console.log(`🔄 Processing job ${job.id}: unlikeTweet`);
+
+  const config = await resolveJobConfig(job);
+  const page = await browserAutomation.createPage(config.sessionCookie);
+
+  try {
+    await browserAutomation.navigateToTwitter(page);
+    const isAuthenticated = await browserAutomation.checkAuthentication(page);
+    if (!isAuthenticated) throw new Error('Session expired - please reconnect your X account');
+    return await browserAutomation.unlikePost(page, tweetUrlFromConfig(config));
+  } finally {
+    await page.close();
+  }
+});
+
+operationsQueue.process('sendDM', 1, async (job) => {
+  console.log(`🔄 Processing job ${job.id}: sendDM`);
+
+  const config = await resolveJobConfig(job);
+  const page = await browserAutomation.createPage(config.sessionCookie);
+
+  try {
+    await browserAutomation.navigateToTwitter(page);
+    const isAuthenticated = await browserAutomation.checkAuthentication(page);
+    if (!isAuthenticated) throw new Error('Session expired - please reconnect your X account');
+    return await browserAutomation.sendDM(page, config.username, config.message);
+  } finally {
+    await page.close();
+  }
+});
+
 // Job event handlers
+operationsQueue.on('active', async (job) => {
+  if (!job.data.operationId) return;
+
+  await prisma.operation.update({
+    where: { id: job.data.operationId },
+    data: {
+      status: 'processing',
+      startedAt: new Date()
+    }
+  }).catch((error) => {
+    console.error(`Failed to mark job active: ${job.id}`, error);
+  });
+});
+
 operationsQueue.on('completed', async (job, result) => {
   console.log(`✅ Job completed: ${job.id}`);
-  
+
+  if (!job.data.operationId) return;
+
   await prisma.operation.update({
     where: { id: job.data.operationId },
     data: {
       status: 'completed',
       completedAt: new Date(),
-      result
+      result: toJsonString(result)
     }
   });
 });
 
 operationsQueue.on('failed', async (job, err) => {
   console.error(`❌ Job failed: ${job.id}`, err);
-  
+
+  if (!job.data.operationId) return;
+
   await prisma.operation.update({
     where: { id: job.data.operationId },
     data: {
@@ -367,7 +551,9 @@ export {
   addJob,
   queueJob,
   getJob,
+  getJobStatus,
   getHistory,
+  getRecentJobs,
   cancelJob,
   isJobCancelled,
   operationsQueue

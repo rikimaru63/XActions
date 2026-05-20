@@ -65,6 +65,7 @@ import datasetsRoutes from './routes/datasets.js';
 import notificationsRoutes from './routes/notifications.js';
 import teamsRoutes from './routes/teams.js';
 import optimizerRoutes from './routes/optimizer.js';
+import actionsRoutes from './routes/actions.js';
 import { startScheduler } from './services/unfollowerScheduler.js';
 import { initializeSocketIO } from './realtime/socketHandler.js';
 import { initializeLicensing, brandingMiddleware } from './services/licensing.js';
@@ -229,6 +230,7 @@ app.use('/api/datasets', datasetsRoutes);
 app.use('/api/notifications', notificationsRoutes);
 app.use('/api/teams', teamsRoutes);
 app.use('/api/optimizer', optimizerRoutes);
+app.use('/api/actions', actionsRoutes);
 
 // Plugin routes — mounted under /api/plugins/<plugin-name>/
 function mountPluginRoutes() {
@@ -350,6 +352,10 @@ app.get('/automations', (req, res) => {
   res.sendFile(path.join(__dirname, '../dashboard/automations.html'));
 });
 
+app.get('/actions', (req, res) => {
+  res.sendFile(path.join(__dirname, '../dashboard/actions.html'));
+});
+
 app.get('/agent', (req, res) => {
   res.sendFile(path.join(__dirname, '../dashboard/agent.html'));
 });
@@ -448,4 +454,3 @@ httpServer.listen(PORT, async () => {
 });
 
 export default app;
-

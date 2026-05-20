@@ -1,0 +1,588 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Target Actions - XActions</title>
+  <meta name="robots" content="noindex, nofollow">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>X</text></svg>">
+  <style>
+    :root {
+      --bg: #000;
+      --panel: #16181c;
+      --panel-2: #202327;
+      --border: #2f3336;
+      --text: #e7e9ea;
+      --muted: #8b8f94;
+      --accent: #1d9bf0;
+      --accent-hover: #1a8cd8;
+      --success: #00ba7c;
+      --warning: #ffad1f;
+      --error: #f4212e;
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    }
+
+    .topbar {
+      height: 56px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 20px;
+      position: sticky;
+      top: 0;
+      background: rgba(0, 0, 0, 0.86);
+      backdrop-filter: blur(12px);
+      z-index: 10;
+    }
+
+    .brand {
+      color: var(--text);
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 18px;
+      font-weight: 800;
+    }
+
+    .nav {
+      display: flex;
+      gap: 4px;
+      align-items: center;
+    }
+
+    .nav a {
+      color: var(--muted);
+      text-decoration: none;
+      font-size: 14px;
+      padding: 8px 12px;
+      border-radius: 999px;
+    }
+
+    .nav a:hover,
+    .nav a.active {
+      color: var(--text);
+      background: var(--panel-2);
+    }
+
+    .main {
+      max-width: 1120px;
+      margin: 0 auto;
+      padding: 24px 20px 48px;
+      display: grid;
+      grid-template-columns: minmax(320px, 420px) minmax(0, 1fr);
+      gap: 20px;
+    }
+
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      overflow: hidden;
+    }
+
+    .panel-header {
+      padding: 16px 18px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    h1, h2 {
+      margin: 0;
+      font-size: 20px;
+      line-height: 1.2;
+    }
+
+    h2 { font-size: 16px; }
+
+    .badge {
+      border: 1px solid var(--border);
+      color: var(--muted);
+      border-radius: 999px;
+      padding: 4px 10px;
+      font-size: 12px;
+      white-space: nowrap;
+    }
+
+    .badge.connected {
+      color: var(--success);
+      border-color: rgba(0, 186, 124, 0.6);
+    }
+
+    .badge.warning {
+      color: var(--warning);
+      border-color: rgba(255, 173, 31, 0.6);
+    }
+
+    .panel-body {
+      padding: 18px;
+    }
+
+    .field {
+      margin-bottom: 16px;
+    }
+
+    label {
+      display: block;
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 650;
+      margin-bottom: 6px;
+    }
+
+    input,
+    textarea {
+      width: 100%;
+      background: var(--bg);
+      color: var(--text);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 11px 12px;
+      font: inherit;
+      outline: none;
+    }
+
+    input:focus,
+    textarea:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 1px var(--accent);
+    }
+
+    textarea {
+      min-height: 104px;
+      resize: vertical;
+    }
+
+    .segmented {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 8px;
+      margin-bottom: 16px;
+    }
+
+    .segmented button,
+    .toggle {
+      border: 1px solid var(--border);
+      background: var(--bg);
+      color: var(--text);
+      border-radius: 8px;
+      padding: 10px 12px;
+      font: inherit;
+      font-size: 14px;
+      cursor: pointer;
+    }
+
+    .segmented button.active,
+    .toggle.active {
+      border-color: var(--accent);
+      background: rgba(29, 155, 240, 0.16);
+    }
+
+    .toggles {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8px;
+      margin-bottom: 16px;
+    }
+
+    .inline-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+
+    .actions {
+      display: flex;
+      gap: 10px;
+      margin-top: 18px;
+    }
+
+    .btn {
+      border: 0;
+      border-radius: 999px;
+      padding: 12px 18px;
+      font: inherit;
+      font-weight: 750;
+      cursor: pointer;
+    }
+
+    .btn-primary {
+      background: var(--accent);
+      color: white;
+      flex: 1;
+    }
+
+    .btn-primary:hover { background: var(--accent-hover); }
+    .btn-secondary { background: var(--panel-2); color: var(--text); }
+    .btn:disabled { opacity: 0.55; cursor: not-allowed; }
+
+    .status {
+      display: none;
+      margin-top: 14px;
+      padding: 12px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--muted);
+      font-size: 14px;
+      white-space: pre-wrap;
+    }
+
+    .status.visible { display: block; }
+    .status.ok { border-color: rgba(0, 186, 124, 0.6); color: var(--success); }
+    .status.err { border-color: rgba(244, 33, 46, 0.6); color: var(--error); }
+
+    .history-list {
+      display: grid;
+      gap: 10px;
+    }
+
+    .history-item {
+      border: 1px solid var(--border);
+      background: var(--bg);
+      border-radius: 8px;
+      padding: 12px;
+      display: grid;
+      gap: 8px;
+    }
+
+    .history-top {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      align-items: center;
+    }
+
+    .history-title {
+      font-weight: 750;
+    }
+
+    .history-meta {
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .pill {
+      border-radius: 999px;
+      padding: 3px 8px;
+      font-size: 12px;
+      border: 1px solid var(--border);
+      color: var(--muted);
+    }
+
+    .pill.completed { color: var(--success); border-color: rgba(0, 186, 124, 0.55); }
+    .pill.failed { color: var(--error); border-color: rgba(244, 33, 46, 0.55); }
+    .pill.processing, .pill.pending, .pill.queued, .pill.active, .pill.waiting {
+      color: var(--warning);
+      border-color: rgba(255, 173, 31, 0.55);
+    }
+
+    .empty {
+      color: var(--muted);
+      padding: 24px;
+      text-align: center;
+      border: 1px dashed var(--border);
+      border-radius: 8px;
+    }
+
+    @media (max-width: 820px) {
+      .main { grid-template-columns: 1fr; }
+      .nav a { display: none; }
+      .nav a.active { display: inline-block; }
+      .toggles { grid-template-columns: 1fr; }
+      .inline-grid { grid-template-columns: 1fr; }
+    }
+  </style>
+  <script src="/js/config.js"></script>
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="/dashboard"><span>XActions</span></a>
+    <nav class="nav" aria-label="Primary">
+      <a href="/dashboard">Dashboard</a>
+      <a href="/actions" class="active">Actions</a>
+      <a href="/automations">Automations</a>
+      <a href="/unfollowers">Unfollowers</a>
+      <a href="/docs">Docs</a>
+    </nav>
+  </header>
+
+  <main class="main">
+    <section class="panel">
+      <div class="panel-header">
+        <h1>Target Actions</h1>
+        <span class="badge" id="session-badge">Checking</span>
+      </div>
+      <div class="panel-body">
+        <div class="field">
+          <label for="target-username">Target username</label>
+          <input id="target-username" autocomplete="off" placeholder="@username">
+        </div>
+
+        <div class="toggles" aria-label="Actions">
+          <button class="toggle active" type="button" id="toggle-like">Like</button>
+          <button class="toggle" type="button" id="toggle-follow">Follow</button>
+          <button class="toggle" type="button" id="toggle-dm">DM</button>
+        </div>
+
+        <div class="inline-grid">
+          <div class="field">
+            <label for="like-count">Latest posts to like</label>
+            <input id="like-count" type="number" min="0" max="10" value="1">
+          </div>
+          <div class="field">
+            <label for="delay-ms">Delay ms</label>
+            <input id="delay-ms" type="number" min="2000" max="60000" step="500" value="3000">
+          </div>
+        </div>
+
+        <div class="field" id="dm-field" style="display:none;">
+          <label for="dm-message">DM message</label>
+          <textarea id="dm-message" maxlength="1000"></textarea>
+        </div>
+
+        <label>Run mode</label>
+        <div class="segmented">
+          <button type="button" id="mode-dry" class="active">Dry run</button>
+          <button type="button" id="mode-live">Live</button>
+        </div>
+
+        <div class="actions">
+          <button class="btn btn-secondary" id="refresh-btn" type="button">Refresh</button>
+          <button class="btn btn-primary" id="run-btn" type="button">Queue Action</button>
+        </div>
+
+        <div class="status" id="form-status"></div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-header">
+        <h2>History</h2>
+        <span class="badge" id="history-count">0</span>
+      </div>
+      <div class="panel-body">
+        <div class="history-list" id="history-list">
+          <div class="empty">No history loaded</div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    let authToken = localStorage.getItem('authToken');
+    let dryRun = true;
+    const state = { like: true, follow: false, dm: false };
+
+    const els = {
+      sessionBadge: document.getElementById('session-badge'),
+      status: document.getElementById('form-status'),
+      runBtn: document.getElementById('run-btn'),
+      refreshBtn: document.getElementById('refresh-btn'),
+      target: document.getElementById('target-username'),
+      likeCount: document.getElementById('like-count'),
+      delayMs: document.getElementById('delay-ms'),
+      dmField: document.getElementById('dm-field'),
+      dmMessage: document.getElementById('dm-message'),
+      historyList: document.getElementById('history-list'),
+      historyCount: document.getElementById('history-count'),
+    };
+
+    function setStatus(message, type = '') {
+      els.status.textContent = message;
+      els.status.className = `status visible ${type}`;
+    }
+
+    function clearStatus() {
+      els.status.textContent = '';
+      els.status.className = 'status';
+    }
+
+    function requireLogin() {
+      if (!authToken) {
+        window.location.href = '/login';
+        return false;
+      }
+      return true;
+    }
+
+    function bindToggle(id, key) {
+      const button = document.getElementById(id);
+      button.addEventListener('click', () => {
+        state[key] = !state[key];
+        button.classList.toggle('active', state[key]);
+        if (key === 'dm') els.dmField.style.display = state.dm ? 'block' : 'none';
+        if (key === 'like') els.likeCount.value = state.like ? Math.max(Number(els.likeCount.value) || 1, 1) : 0;
+      });
+    }
+
+    document.getElementById('mode-dry').addEventListener('click', () => {
+      dryRun = true;
+      document.getElementById('mode-dry').classList.add('active');
+      document.getElementById('mode-live').classList.remove('active');
+    });
+
+    document.getElementById('mode-live').addEventListener('click', () => {
+      dryRun = false;
+      document.getElementById('mode-live').classList.add('active');
+      document.getElementById('mode-dry').classList.remove('active');
+    });
+
+    bindToggle('toggle-like', 'like');
+    bindToggle('toggle-follow', 'follow');
+    bindToggle('toggle-dm', 'dm');
+
+    async function checkSession() {
+      if (!requireLogin()) return;
+
+      try {
+        const data = await apiRequest('/session/auth-method');
+        if (data.hasSession) {
+          els.sessionBadge.textContent = data.username ? `@${data.username}` : 'Session connected';
+          els.sessionBadge.className = 'badge connected';
+        } else {
+          els.sessionBadge.textContent = 'No X session';
+          els.sessionBadge.className = 'badge warning';
+        }
+      } catch (error) {
+        els.sessionBadge.textContent = 'Auth error';
+        els.sessionBadge.className = 'badge warning';
+      }
+    }
+
+    async function queueAction() {
+      if (!requireLogin()) return;
+      clearStatus();
+
+      const targetUsername = els.target.value.trim();
+      const likeCount = state.like ? Number(els.likeCount.value) || 0 : 0;
+      const payload = {
+        targetUsername,
+        likeCount,
+        follow: state.follow,
+        dmMessage: state.dm ? els.dmMessage.value.trim() : '',
+        dryRun,
+        delayMs: Number(els.delayMs.value) || 3000,
+      };
+
+      if (!payload.targetUsername) {
+        setStatus('Target username is required.', 'err');
+        return;
+      }
+
+      if (!payload.likeCount && !payload.follow && !payload.dmMessage) {
+        setStatus('Choose at least one action.', 'err');
+        return;
+      }
+
+      els.runBtn.disabled = true;
+      els.runBtn.textContent = 'Queueing...';
+
+      try {
+        const data = await apiRequest('/actions/target', {
+          method: 'POST',
+          body: JSON.stringify(payload),
+        });
+
+        setStatus(`Queued ${data.operationId}${data.dryRun ? ' (dry run)' : ''}`, 'ok');
+        await loadHistory();
+      } catch (error) {
+        setStatus(error.message, 'err');
+      } finally {
+        els.runBtn.disabled = false;
+        els.runBtn.textContent = 'Queue Action';
+      }
+    }
+
+    function parseJson(value) {
+      if (!value) return null;
+      if (typeof value !== 'string') return value;
+      try { return JSON.parse(value); } catch { return null; }
+    }
+
+    function escapeHtml(value) {
+      return String(value ?? '').replace(/[&<>"']/g, (char) => ({
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#39;',
+      })[char]);
+    }
+
+    function actionLabel(op) {
+      const config = parseJson(op.config) || {};
+      const target = config.targetUsername ? `@${config.targetUsername}` : '';
+      const parts = [];
+      if (config.likeCount) parts.push(`${config.likeCount} like${config.likeCount === 1 ? '' : 's'}`);
+      if (config.follow) parts.push('follow');
+      if (config.hasDmMessage) parts.push('DM');
+      return `${parts.join(' + ') || op.type} ${target}`.trim();
+    }
+
+    function renderHistory(operations) {
+      els.historyCount.textContent = String(operations.length);
+      if (!operations.length) {
+        els.historyList.innerHTML = '<div class="empty">No operations yet</div>';
+        return;
+      }
+
+      els.historyList.innerHTML = operations.map((op) => {
+        const result = parseJson(op.result);
+        const failed = result?.failed?.length ? `${result.failed.length} failed` : '';
+        const detail = result
+          ? `${result.liked?.length || 0} liked, ${result.followed ? 1 : 0} follow, ${result.dm ? 1 : 0} DM ${failed}`.trim()
+          : (op.error || 'Waiting for worker');
+        const status = String(op.status || 'pending');
+        const statusClass = status.replace(/[^a-z0-9_-]/gi, '').toLowerCase();
+
+        return `
+          <div class="history-item">
+            <div class="history-top">
+              <div>
+                <div class="history-title">${escapeHtml(actionLabel(op))}</div>
+                <div class="history-meta">${escapeHtml(timeAgo(op.createdAt))} - ${escapeHtml(op.id)}</div>
+              </div>
+              <span class="pill ${statusClass}">${escapeHtml(status)}</span>
+            </div>
+            <div class="history-meta">${escapeHtml(detail)}</div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    async function loadHistory() {
+      if (!requireLogin()) return;
+
+      try {
+        const data = await apiRequest('/operations?limit=20&type=targetEngage');
+        renderHistory(data.operations || []);
+      } catch (error) {
+        els.historyList.innerHTML = `<div class="empty">${error.message}</div>`;
+      }
+    }
+
+    els.runBtn.addEventListener('click', queueAction);
+    els.refreshBtn.addEventListener('click', () => {
+      checkSession();
+      loadHistory();
+    });
+
+    requireLogin();
+    checkSession();
+    loadHistory();
+    setInterval(loadHistory, 10000);
+  </script>
+</body>
+</html>
