@@ -81,6 +81,9 @@ import { validateConfig as validateX402Config } from './config/x402-config.js';
 const app = express();
 const httpServer = createServer(app);
 
+// Coolify/Traefik terminates TLS and forwards client IPs for rate limiting.
+app.set('trust proxy', process.env.TRUST_PROXY || 1);
+
 // Initialize Socket.io for real-time browser-to-browser communication
 const io = initializeSocketIO(httpServer);
 
