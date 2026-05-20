@@ -56,6 +56,8 @@ services:
       redis:
         condition: service_healthy
     command: ["node", "api/services/jobQueue.js"]
+    healthcheck:
+      disable: true
 
   postgres:
     image: postgres:16-alpine
