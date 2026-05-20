@@ -99,6 +99,9 @@ app.use(helmet({
     directives: {
       defaultSrc: ["'self'"],
       scriptSrc: ["'self'", "'unsafe-inline'", "https://cdn.socket.io", "https://cdn.jsdelivr.net"],
+      // helmet v6+ では scriptSrcAttr が未指定だと自動で 'none' になり inline onclick が全部ブロックされる
+      // dashboard/*.html に 70+ 個の onclick が散らばっているため scriptSrc と同等の許可に揃える
+      scriptSrcAttr: ["'unsafe-inline'"],
       styleSrc: ["'self'", "'unsafe-inline'"],
       imgSrc: ["'self'", "data:", "https:"],
       connectSrc: ["'self'", "wss:", "https:"],
