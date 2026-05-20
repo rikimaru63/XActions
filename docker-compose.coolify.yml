@@ -11,12 +11,6 @@ services:
       context: .
       dockerfile: Dockerfile
     restart: unless-stopped
-    labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.xactions.rule=Host(`${DOMAIN:-xactions.localhost}`)"
-      - "traefik.http.routers.xactions.entrypoints=websecure"
-      - "traefik.http.routers.xactions.tls.certresolver=letsencrypt"
-      - "traefik.http.services.xactions.loadbalancer.server.port=3001"
     environment:
       NODE_ENV: production
       PORT: 3001
