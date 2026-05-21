@@ -58,6 +58,26 @@ docker exec \
 unset COOKIE_A COOKIE_B
 ```
 
+### 既存 XAccount ID を使う場合
+
+`/console` から実 X アカウントを2つ登録済みなら、Cookieを渡さずに
+アカウントIDだけで同じ smoke を実行できます。この場合、既存アカウントは削除せず、
+テスト中に作成した予約、実行履歴、Operation だけを削除します。
+
+```bash
+set -euo pipefail
+
+api="$(docker ps --format '{{.Names}}' | grep '^api-sg008w80csw08skkwcwswwgw' | head -n 1)"
+test -n "$api"
+
+docker exec \
+  -e XACTIONS_BASE_URL='https://xactions.logence.co.jp' \
+  -e XACTIONS_SMOKE_USERNAME='test_account_20260521092255' \
+  -e XACTIONS_LIVE_ACCOUNT_IDS='xaccount_id_1,xaccount_id_2' \
+  -e XACTIONS_LIVE_PROFILE_TARGET='x' \
+  "$api" npm run smoke:console-live-readonly
+```
+
 成功時はJSONで `ok: true` が出ます。重要な確認点は次の通りです。
 
 - `accounts` が2件あり、両方 `status: "active"`
@@ -88,4 +108,3 @@ Cookieなしで安全に確認できるのは構文チェックまでです。
 ```powershell
 node --check scripts\smoke-console-live-readonly.js
 ```
-

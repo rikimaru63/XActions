@@ -18,6 +18,18 @@ const liveCookies = [
   process.env.XACTIONS_LIVE_ACCOUNT_B_COOKIE,
 ].map((value) => String(value || '').trim());
 
+function liveAccountIdsFromEnv() {
+  const ids = [
+    ...String(process.env.XACTIONS_LIVE_ACCOUNT_IDS || '').split(','),
+    process.env.XACTIONS_LIVE_ACCOUNT_A_ID,
+    process.env.XACTIONS_LIVE_ACCOUNT_B_ID,
+  ]
+    .map((value) => String(value || '').trim())
+    .filter(Boolean);
+
+  return [...new Set(ids)];
+}
+
 const created = {
   accountIds: [],
   scheduleIds: [],
@@ -177,8 +189,11 @@ async function cleanupSmokeRows(userId, options = {}) {
   };
 }
 
-async function createVerifiedAccounts(token) {
-  assert(liveCookies.every(Boolean), 'Set XACTIONS_LIVE_ACCOUNT_A_COOKIE and XACTIONS_LIVE_ACCOUNT_B_COOKIE.');
+async function createCookieBackedAccounts(token) {
+  assert(
+    liveCookies.every(Boolean),
+    'Set XACTIONS_LIVE_ACCOUNT_A_COOKIE and XACTIONS_LIVE_ACCOUNT_B_COOKIE, or set exactly two existing accounts with XACTIONS_LIVE_ACCOUNT_IDS.'
+  );
   assert(liveCookies[0] !== liveCookies[1], 'Use two different X session cookies for live multi-account smoke.');
   assert(profileTarget, 'Set XACTIONS_LIVE_PROFILE_TARGET or use the default target.');
 
@@ -200,7 +215,53 @@ async function createVerifiedAccounts(token) {
     accounts.push(response.account);
     created.accountIds.push(response.account.id);
   }
-  return accounts;
+  return {
+    source: 'temporary-cookies',
+    cleanupAccounts: true,
+    accounts,
+  };
+}
+
+async function resolveExistingAccounts(user) {
+  const accountIds = liveAccountIdsFromEnv();
+  assert(
+    accountIds.length === 2,
+    `Set exactly two existing XAccount IDs. Received ${accountIds.length}. Use XACTIONS_LIVE_ACCOUNT_IDS="id1,id2" or XACTIONS_LIVE_ACCOUNT_A_ID / XACTIONS_LIVE_ACCOUNT_B_ID.`
+  );
+  assert(profileTarget, 'Set XACTIONS_LIVE_PROFILE_TARGET or use the default target.');
+
+  const accounts = await prisma.xAccount.findMany({
+    where: {
+      userId: user.id,
+      id: { in: accountIds },
+    },
+    select: {
+      id: true,
+      username: true,
+      status: true,
+      lastVerifiedAt: true,
+    },
+  });
+  const byId = new Map(accounts.map((account) => [account.id, account]));
+  const orderedAccounts = accountIds.map((id) => byId.get(id));
+  const missingIds = accountIds.filter((id, index) => !orderedAccounts[index]);
+  assert(!missingIds.length, `Existing XAccount IDs were not found for ${smokeUsername}: ${missingIds.join(', ')}`);
+
+  const unavailable = orderedAccounts.filter((account) => account.status !== 'active');
+  assert(!unavailable.length, `Existing XAccounts must be active: ${unavailable.map((account) => account.id).join(', ')}`);
+
+  return {
+    source: 'existing-accounts',
+    cleanupAccounts: false,
+    accounts: orderedAccounts,
+  };
+}
+
+async function resolveLiveAccounts(user, token) {
+  if (liveAccountIdsFromEnv().length > 0) {
+    return resolveExistingAccounts(user);
+  }
+  return createCookieBackedAccounts(token);
 }
 
 async function pollOperations(operationIds, label) {
@@ -293,7 +354,8 @@ async function main() {
   const user = await resolveSmokeUser();
   const token = await resolveToken(user);
   const staleCleanup = await cleanupSmokeRows(user.id, { stale: true, staleHours: 24 });
-  const accounts = await createVerifiedAccounts(token);
+  const liveAccounts = await resolveLiveAccounts(user, token);
+  const accounts = liveAccounts.accounts;
   const accountIds = accounts.map((account) => account.id);
 
   const executeResponse = await requestJson('/api/console/actions/execute', {
@@ -363,17 +425,20 @@ async function main() {
   assert(childOperationIds.every((operationId) => historyIds.has(operationId)), 'Live child operations were not visible in filtered history.');
   assert(runNowResponses.every((runNow) => historyIds.has(runNow.operationId)), 'Live scheduled operations were not visible in filtered history.');
 
-  const accountDeletes = await deleteAccounts(token, accounts);
+  const accountDeletes = liveAccounts.cleanupAccounts
+    ? await deleteAccounts(token, accounts)
+    : [];
 
   console.log(JSON.stringify({
     ok: true,
     baseUrl,
     smokeId,
+    accountSource: liveAccounts.source,
     profileTarget,
     staleCleanup,
     accounts: accounts.map((account) => ({
       id: account.id,
-      username: account.username,
+      username: liveAccounts.cleanupAccounts ? account.username : undefined,
       status: account.status,
       verified: !!account.lastVerifiedAt,
     })),
