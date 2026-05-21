@@ -180,6 +180,10 @@ app.get('/manifest.json', (req, res) => {
   res.type('application/json').sendFile(path.join(__dirname, '../public/manifest.json'));
 });
 
+app.get('/favicon.ico', (_req, res) => {
+  res.status(204).end();
+});
+
 // AI API endpoints
 app.get('/api/ai/health', x402HealthCheck);
 app.get('/api/ai/pricing', x402Pricing);
