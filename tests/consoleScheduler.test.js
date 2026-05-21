@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { getFeatureById, getPublicFeatureCatalog } from '../api/config/features.js';
 import { shouldSerializeAccountJob } from '../api/services/accountExecutionLock.js';
+import { explicitAccountIdsFromBody } from '../api/services/accountSelection.js';
 import { isSessionExpiredError } from '../api/services/accountStore.js';
 import { createActionPayload } from '../api/services/consoleActions.js';
 import { summarizeChildStatuses } from '../api/services/operationBatches.js';
@@ -92,5 +93,11 @@ describe('console scheduler helpers', () => {
     expect(isSessionExpiredError(new Error('Session expired - please reconnect your X account'))).toBe(true);
     expect(isSessionExpiredError('X連携情報でログイン状態を確認できませんでした。')).toBe(true);
     expect(isSessionExpiredError(new Error('Like button not found'))).toBe(false);
+  });
+
+  it('requires explicit account selection for account actions', () => {
+    expect(explicitAccountIdsFromBody({ accountId: 'acc_1' })).toEqual(['acc_1']);
+    expect(explicitAccountIdsFromBody({ accountIds: ['acc_1', 'acc_1', ' acc_2 '] })).toEqual(['acc_1', 'acc_2']);
+    expect(explicitAccountIdsFromBody({})).toEqual([]);
   });
 });

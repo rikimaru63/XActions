@@ -14,6 +14,7 @@ import {
   sanitizeOperation,
 } from '../services/consoleActions.js';
 import { listAccountsForUser } from '../services/accountStore.js';
+import { explicitAccountIdsFromBody } from '../services/accountSelection.js';
 import { createSchedulesFromRequest } from '../services/scheduledActions.js';
 
 const router = express.Router();
@@ -25,12 +26,12 @@ async function resolveExecutionAccounts(req, feature) {
   if (!feature.accountRequired) return [null];
 
   const accounts = await listAccountsForUser(req.user);
-  const requested = Array.isArray(req.body.accountIds)
-    ? req.body.accountIds
-    : [req.body.accountId || accounts.find((account) => account.isDefault)?.id || accounts[0]?.id].filter(Boolean);
+  const requested = explicitAccountIdsFromBody(req.body);
 
   if (!requested.length) {
-    const error = new Error('X連携が必要です。設定からXアカウントを連携してください。');
+    const error = new Error(accounts.length
+      ? '実行アカウントを選択してください。'
+      : 'X連携が必要です。設定からXアカウントを連携してください。');
     error.statusCode = 400;
     throw error;
   }
@@ -50,7 +51,7 @@ async function resolveExecutionAccounts(req, feature) {
     }
   }
 
-  return [...new Set(requested)];
+  return requested;
 }
 
 function configFromOperation(featureId, operationConfig = {}, overrideConfig = {}) {

@@ -12,6 +12,7 @@ import {
   listAccountsForUser,
   sanitizeAccount,
 } from './accountStore.js';
+import { explicitAccountIdsFromBody } from './accountSelection.js';
 import { decrypt, encrypt } from './sessionCrypto.js';
 import { calculateNextRunAt, normalizeScheduleInput } from './scheduleUtils.js';
 
@@ -98,12 +99,12 @@ async function resolveAccountIds(user, feature, body) {
   if (!feature.accountRequired) return [null];
 
   const accounts = await listAccountsForUser(user);
-  const requested = Array.isArray(body.accountIds)
-    ? body.accountIds
-    : [body.accountId || accounts.find((account) => account.isDefault)?.id || accounts[0]?.id].filter(Boolean);
+  const requested = explicitAccountIdsFromBody(body);
 
   if (!requested.length) {
-    throw new Error('Xアカウントを追加してください。');
+    throw new Error(accounts.length
+      ? '実行アカウントを選択してください。'
+      : 'Xアカウントを追加してください。');
   }
 
   const allowed = new Map(accounts.map((account) => [account.id, account]));
@@ -113,7 +114,7 @@ async function resolveAccountIds(user, feature, body) {
     if (account.status !== 'active') throw new Error(`@${account.username} は実行できる状態ではありません。`);
   }
 
-  return [...new Set(requested)];
+  return requested;
 }
 
 async function createSchedulesFromRequest(user, body) {
