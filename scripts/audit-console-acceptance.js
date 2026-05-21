@@ -51,6 +51,7 @@ function auditStaticAcceptance() {
   const accountSelection = read('api/services/accountSelection.js');
   const uiSmoke = read('scripts/smoke-console-ui.js');
   const accountUiSmoke = read('scripts/smoke-console-ui-accounts.js');
+  const catalogAudit = read('scripts/audit-console-catalog.js');
   const liveAccountRegistration = read('scripts/register-console-live-accounts.js');
   const liveAccountRegistrationHost = read('scripts/register-console-live-accounts-host.sh');
   const liveSmokeDocs = read('docs/console-live-smoke.md');
@@ -71,6 +72,12 @@ function auditStaticAcceptance() {
   const unavailableFeatures = features.filter((feature) => feature.status !== 'available');
   const missingConsoleActions = executableFeatures.filter((feature) => !feature.consoleAction);
   const missingScheduleSupport = executableFeatures.filter((feature) => !feature.supportsSchedule);
+  const catalogReachabilityMissing = hasAll(catalogAudit, [
+    'variantConfigsByFeature',
+    'payloadOperationTypes',
+    'worker processor is not reachable from console catalog payloads',
+    'reachableQueueTypes',
+  ]);
   const sendDmFeature = features.find((feature) => feature.id === 'sendDM');
 
   const dedicatedDmMissing = [
@@ -317,17 +324,20 @@ function auditStaticAcceptance() {
         && unavailableFeatures.length === 0
         && missingConsoleActions.length === 0
         && missingScheduleSupport.length === 0
-        && missingProcessors.length === 0,
+        && missingProcessors.length === 0
+        && catalogReachabilityMissing.length === 0,
       {
         categories: featureCategories.length,
         features: features.length,
         queueTypes: requiredQueueTypes.length,
+        dynamicReachabilityAudit: true,
       },
       [
         ...unavailableFeatures.map((feature) => `${feature.id}: status=${feature.status}`),
         ...missingConsoleActions.map((feature) => `${feature.id}: missing consoleAction`),
         ...missingScheduleSupport.map((feature) => `${feature.id}: missing supportsSchedule`),
         ...missingProcessors.map((type) => `${type}: missing worker processor`),
+        ...catalogReachabilityMissing,
       ]
     ),
     item(

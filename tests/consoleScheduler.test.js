@@ -1167,16 +1167,46 @@ describe('console scheduler helpers', () => {
       },
     });
 
-    const spaces = createActionPayload(
+    const liveSpaces = createActionPayload(
+      getFeatureById('spaces'),
+      { mode: 'live', topic: 'xactions', limit: 10 },
+      'dryRun'
+    );
+    expect(liveSpaces).toMatchObject({
+      operationType: 'getLiveSpaces',
+      jobConfig: {
+        mode: 'live',
+        topic: 'xactions',
+        limit: 10,
+        dryRun: true,
+      },
+    });
+
+    const scheduledSpaces = createActionPayload(
       getFeatureById('spaces'),
       { mode: 'scheduled', username: '@host_user', limit: 10 },
       'dryRun'
     );
-    expect(spaces).toMatchObject({
+    expect(scheduledSpaces).toMatchObject({
       operationType: 'getScheduledSpaces',
       jobConfig: {
         mode: 'scheduled',
         username: 'host_user',
+        limit: 10,
+        dryRun: true,
+      },
+    });
+
+    const scrapedSpace = createActionPayload(
+      getFeatureById('spaces'),
+      { mode: 'scrape', spaceUrl: 'https://x.com/i/spaces/1DXxyjWmQnZKM', limit: 10 },
+      'dryRun'
+    );
+    expect(scrapedSpace).toMatchObject({
+      operationType: 'scrapeSpace',
+      jobConfig: {
+        mode: 'scrape',
+        spaceUrl: 'https://x.com/i/spaces/1DXxyjWmQnZKM',
         limit: 10,
         dryRun: true,
       },

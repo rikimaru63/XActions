@@ -196,6 +196,27 @@ const sampleConfigByFeature = {
   },
 };
 
+const variantConfigsByFeature = {
+  spaces: [
+    {
+      label: 'scheduled',
+      config: {
+        mode: 'scheduled',
+        username: 'host_user',
+        limit: 1,
+      },
+    },
+    {
+      label: 'scrape',
+      config: {
+        mode: 'scrape',
+        spaceUrl: 'https://x.com/i/spaces/1DXxyjWmQnZKM',
+        limit: 1,
+      },
+    },
+  ],
+};
+
 const hiddenStringsByFeature = {
   targetEngage: ['secret-dm-body'],
   sendDM: ['secret-dm-body'],
@@ -313,6 +334,7 @@ function auditCatalog() {
 
   const missing = [];
   const payloads = [];
+  const payloadOperationTypes = new Set();
 
   for (const feature of features) {
     if (featureIds.has(feature.id)) missing.push(`${feature.id}: duplicate feature id`);
@@ -329,11 +351,26 @@ function auditCatalog() {
     const queueType = feature.queueType || feature.operationType;
     if (!processors.has(queueType)) missing.push(`${feature.id}: missing worker processor for ${queueType}`);
 
-    for (const mode of ['dryRun', 'live']) {
-      const shouldSucceed = mode === 'live' || feature.supportsDryRun;
+    const auditCases = [
+      ...['dryRun', 'live'].map((mode) => ({
+        label: mode,
+        mode,
+        config: sampleConfigByFeature[feature.id],
+        shouldSucceed: mode === 'live' || feature.supportsDryRun,
+      })),
+      ...(variantConfigsByFeature[feature.id] || []).map((variant) => ({
+        label: variant.label,
+        mode: variant.mode || 'dryRun',
+        config: variant.config,
+        shouldSucceed: true,
+      })),
+    ];
+
+    for (const auditCase of auditCases) {
+      const { label, mode, config: sampleConfig, shouldSucceed } = auditCase;
       try {
         const config = {
-          ...sampleConfigByFeature[feature.id],
+          ...sampleConfig,
           ...sensitiveProbeConfig,
         };
         const payload = createActionPayload(
@@ -344,35 +381,36 @@ function auditCatalog() {
         );
 
         if (!shouldSucceed) {
-          missing.push(`${feature.id}: ${mode} unexpectedly succeeded`);
+          missing.push(`${feature.id}: ${label} unexpectedly succeeded`);
           continue;
         }
 
         if (payload.operationConfig?.sourceFeatureId !== feature.id) {
-          missing.push(`${feature.id}: ${mode} sourceFeatureId mismatch`);
+          missing.push(`${feature.id}: ${label} sourceFeatureId mismatch`);
         }
         if (!processors.has(payload.operationType)) {
-          missing.push(`${feature.id}: ${mode} payload operationType ${payload.operationType} has no worker`);
+          missing.push(`${feature.id}: ${label} payload operationType ${payload.operationType} has no worker`);
         }
+        payloadOperationTypes.add(payload.operationType);
 
         const serializedOperationConfig = JSON.stringify(payload.operationConfig || {});
         for (const secret of hiddenStringsByFeature[feature.id] || []) {
           if (serializedOperationConfig.includes(secret)) {
-            missing.push(`${feature.id}: ${mode} operationConfig leaks ${secret}`);
+            missing.push(`${feature.id}: ${label} operationConfig leaks ${secret}`);
           }
         }
 
         const sensitiveLeaks = [
-          ...sensitivePayloadLeaks(payload.operationConfig, `${feature.id}.${mode}.operationConfig`),
-          ...sensitivePayloadLeaks(payload.jobConfig, `${feature.id}.${mode}.jobConfig`),
+          ...sensitivePayloadLeaks(payload.operationConfig, `${feature.id}.${label}.operationConfig`),
+          ...sensitivePayloadLeaks(payload.jobConfig, `${feature.id}.${label}.jobConfig`),
         ];
         if (sensitiveLeaks.length) {
-          missing.push(`${feature.id}: ${mode} payload leaked sensitive fields: ${sensitiveLeaks.join('; ')}`);
+          missing.push(`${feature.id}: ${label} payload leaked sensitive fields: ${sensitiveLeaks.join('; ')}`);
         }
 
         payloads.push({
           id: feature.id,
-          mode,
+          mode: label,
           operationType: payload.operationType,
           sourceFeatureId: payload.operationConfig?.sourceFeatureId || null,
           dryRun: payload.operationConfig?.dryRun,
@@ -380,9 +418,15 @@ function auditCatalog() {
         });
       } catch (error) {
         if (shouldSucceed) {
-          missing.push(`${feature.id}: ${mode} payload failed: ${error.message}`);
+          missing.push(`${feature.id}: ${label} payload failed: ${error.message}`);
         }
       }
+    }
+  }
+
+  for (const processor of processors) {
+    if (!payloadOperationTypes.has(processor)) {
+      missing.push(`${processor}: worker processor is not reachable from console catalog payloads`);
     }
   }
 
@@ -397,6 +441,7 @@ function auditCatalog() {
       ok: false,
       missing,
       payloadCount: payloads.length,
+      reachableQueueTypes: [...payloadOperationTypes].sort(),
       ...(verbose ? { payloads } : {}),
     };
   }
@@ -413,6 +458,7 @@ function auditCatalog() {
     })),
     sensitivePayloadsHidden: true,
     queueTypes: [...new Set(consoleFeatures.map((feature) => feature.queueType || feature.operationType))].sort(),
+    reachableQueueTypes: [...payloadOperationTypes].sort(),
     payloadCount: payloads.length,
     ...(verbose ? { payloads } : {}),
   };
