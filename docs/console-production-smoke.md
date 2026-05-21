@@ -45,6 +45,17 @@ XACTIONS_COOLIFY_APP_UUID='sg008w80csw08skkwcwswwgw' \
 bash scripts/smoke-console-production-host.sh
 ```
 
+Scheduler smoke mode:
+
+- `XACTIONS_PRODUCTION_SCHEDULER_SMOKE=auto` is the default. It runs the
+  production-safe scheduler smoke, including multiple temporary accounts,
+  due schedules, stale-lock recovery, interval recurrence, run history, and
+  cleanup residue checks.
+- `XACTIONS_PRODUCTION_SCHEDULER_SMOKE=always` currently behaves like `auto`
+  and is available for explicit CI configuration.
+- `XACTIONS_PRODUCTION_SCHEDULER_SMOKE=never` skips the scheduler smoke when
+  you only want the lighter endpoint/UI checks.
+
 Live readonly mode:
 
 - `XACTIONS_PRODUCTION_LIVE_READONLY=auto` is the default. It runs the live

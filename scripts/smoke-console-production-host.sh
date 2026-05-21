@@ -6,6 +6,7 @@ APP_UUID="${XACTIONS_COOLIFY_APP_UUID:-sg008w80csw08skkwcwswwgw}"
 SMOKE_USERNAME="${XACTIONS_SMOKE_USERNAME:-test_account_20260521092255}"
 API_CONTAINER="${XACTIONS_API_CONTAINER:-}"
 WORKER_CONTAINER="${XACTIONS_WORKER_CONTAINER:-}"
+SCHEDULER_SMOKE_MODE="${XACTIONS_PRODUCTION_SCHEDULER_SMOKE:-auto}"
 LIVE_READONLY_MODE="${XACTIONS_PRODUCTION_LIVE_READONLY:-auto}"
 
 find_container() {
@@ -22,6 +23,14 @@ require_command() {
 
 require_command docker
 require_command curl
+
+case "$SCHEDULER_SMOKE_MODE" in
+  auto|always|never) ;;
+  *)
+    echo "XACTIONS_PRODUCTION_SCHEDULER_SMOKE must be auto, always, or never." >&2
+    exit 1
+    ;;
+esac
 
 case "$LIVE_READONLY_MODE" in
   auto|always|never) ;;
@@ -50,6 +59,7 @@ fi
 echo "baseUrl=${BASE_URL}"
 echo "apiContainer=${API_CONTAINER}"
 echo "workerContainer=${WORKER_CONTAINER}"
+echo "schedulerSmokeMode=${SCHEDULER_SMOKE_MODE}"
 echo "liveReadonlyMode=${LIVE_READONLY_MODE}"
 
 health_body="$(curl -fsS "${BASE_URL}/api/health")"
@@ -203,6 +213,21 @@ if ! grep -q 'Scheduled action scheduler started' <<<"$worker_logs"; then
   exit 1
 fi
 echo "ok scheduler log"
+
+maybe_run_scheduler_smoke() {
+  if [[ "$SCHEDULER_SMOKE_MODE" == "never" ]]; then
+    echo "skip scheduler smoke: disabled by XACTIONS_PRODUCTION_SCHEDULER_SMOKE=never"
+    return 0
+  fi
+
+  docker exec \
+    -e XACTIONS_BASE_URL="$BASE_URL" \
+    -e XACTIONS_SMOKE_USERNAME="$SMOKE_USERNAME" \
+    "$API_CONTAINER" npm run smoke:console-scheduler
+  echo "ok console scheduler smoke"
+}
+
+maybe_run_scheduler_smoke
 
 host_has_live_cookies() {
   [[ -n "${XACTIONS_LIVE_ACCOUNT_A_COOKIE:-}" && -n "${XACTIONS_LIVE_ACCOUNT_B_COOKIE:-}" ]]
