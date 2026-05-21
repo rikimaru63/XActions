@@ -7,7 +7,11 @@ import {
   explicitAccountIdsFromBody,
   MAX_ACCOUNT_SELECTION,
 } from '../api/services/accountSelection.js';
-import { isSessionExpiredError } from '../api/services/accountStore.js';
+import {
+  accountPauseMessage,
+  isSessionExpiredError,
+  shouldPauseSchedulesForAccountStatus,
+} from '../api/services/accountStore.js';
 import { createActionPayload, sanitizeConfig } from '../api/services/consoleActions.js';
 import {
   buildEncryptedRetryConfig,
@@ -128,6 +132,14 @@ describe('console scheduler helpers', () => {
     expect(isSessionExpiredError(new Error('Session expired - please reconnect your X account'))).toBe(true);
     expect(isSessionExpiredError('X連携情報でログイン状態を確認できませんでした。')).toBe(true);
     expect(isSessionExpiredError(new Error('Like button not found'))).toBe(false);
+  });
+
+  it('pauses schedules when an account becomes unavailable', () => {
+    expect(shouldPauseSchedulesForAccountStatus('active')).toBe(false);
+    expect(shouldPauseSchedulesForAccountStatus('expired')).toBe(true);
+    expect(shouldPauseSchedulesForAccountStatus('error')).toBe(true);
+    expect(shouldPauseSchedulesForAccountStatus('disabled')).toBe(true);
+    expect(accountPauseMessage('disabled')).toBe('Xアカウントを停止したため予約を停止しました。');
   });
 
   it('requires explicit account selection for account actions', () => {

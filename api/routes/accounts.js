@@ -2,9 +2,12 @@ import express from 'express';
 import { PrismaClient } from '@prisma/client';
 import { authMiddleware } from '../middleware/auth.js';
 import {
+  accountPauseMessage,
   listAccountsForUser,
+  pauseActiveSchedulesForAccount,
   sanitizeAccount,
   setDefaultAccount,
+  shouldPauseSchedulesForAccountStatus,
   upsertAccountForUser,
   verifySessionCookie,
 } from '../services/accountStore.js';
@@ -118,12 +121,26 @@ router.patch('/:id', async (req, res) => {
       data,
     });
 
+    const schedulePause = shouldPauseSchedulesForAccountStatus(updated.status)
+      ? await pauseActiveSchedulesForAccount(
+          req.user.id,
+          account.id,
+          accountPauseMessage(updated.status)
+        )
+      : { count: 0 };
+
     if (req.body.isDefault === true || req.body.isDefault === 'true') {
       const defaulted = await setDefaultAccount(req.user.id, account.id);
-      return res.json({ account: sanitizeAccount(defaulted) });
+      return res.json({
+        account: sanitizeAccount(defaulted),
+        pausedSchedules: schedulePause.count,
+      });
     }
 
-    res.json({ account: sanitizeAccount(updated) });
+    res.json({
+      account: sanitizeAccount(updated),
+      pausedSchedules: schedulePause.count,
+    });
   } catch (error) {
     console.error('Update account error:', error);
     res.status(400).json({ error: error.message || 'アカウントを更新できませんでした。' });
@@ -137,13 +154,7 @@ router.delete('/:id', async (req, res) => {
     });
     if (!account) return res.status(404).json({ error: 'アカウントが見つかりません。' });
 
-    await prisma.scheduledAction.updateMany({
-      where: { userId: req.user.id, accountId: account.id, status: 'active' },
-      data: {
-        status: 'paused',
-        lastError: 'アカウント削除のため停止しました。',
-      },
-    });
+    await pauseActiveSchedulesForAccount(req.user.id, account.id, accountPauseMessage('deleted'));
 
     await prisma.xAccount.delete({ where: { id: account.id } });
 

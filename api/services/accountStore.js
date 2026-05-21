@@ -3,6 +3,7 @@ import browserAutomation from './browserAutomation.js';
 import { decrypt, encrypt } from './sessionCrypto.js';
 
 const prisma = new PrismaClient();
+const pauseScheduleStatuses = new Set(['expired', 'error', 'disabled']);
 
 function normalizeUsername(username = '') {
   return String(username).trim().replace(/^@/, '').replace(/[^a-zA-Z0-9_]/g, '');
@@ -40,6 +41,37 @@ function accountStatusLabel(status) {
 function isSessionExpiredError(error) {
   const message = String(error?.message || error || '').toLowerCase();
   return /session expired|invalid session|authentication failed|login required|please reconnect|ログイン状態|ログインでき|期限切れ/.test(message);
+}
+
+function shouldPauseSchedulesForAccountStatus(status) {
+  return pauseScheduleStatuses.has(status);
+}
+
+function accountPauseMessage(status) {
+  return {
+    expired: 'Xのログイン状態が切れました。連携情報を更新してください。',
+    error: 'Xアカウントの確認でエラーが発生したため予約を停止しました。',
+    disabled: 'Xアカウントを停止したため予約を停止しました。',
+    deleted: 'アカウント削除のため停止しました。',
+  }[status] || 'Xアカウントが実行できない状態のため予約を停止しました。';
+}
+
+async function pauseActiveSchedulesForAccount(userId, accountId, message) {
+  if (!userId || !accountId) return { count: 0 };
+
+  return prisma.scheduledAction.updateMany({
+    where: {
+      userId,
+      accountId,
+      status: 'active',
+    },
+    data: {
+      status: 'paused',
+      lockedAt: null,
+      lockedBy: null,
+      lastError: message || accountPauseMessage(),
+    },
+  });
 }
 
 async function ensureSingleDefault(userId, accountId) {
@@ -182,19 +214,7 @@ async function markAccountSessionExpired(userId, accountId, error) {
 
   if (updated.count !== 1) return false;
 
-  await prisma.scheduledAction.updateMany({
-    where: {
-      userId,
-      accountId,
-      status: 'active',
-    },
-    data: {
-      status: 'paused',
-      lockedAt: null,
-      lockedBy: null,
-      lastError: message,
-    },
-  }).catch(() => {});
+  await pauseActiveSchedulesForAccount(userId, accountId, message).catch(() => {});
 
   return true;
 }
@@ -279,14 +299,17 @@ async function setDefaultAccount(userId, accountId) {
 
 export {
   ensureDefaultAccountForUser,
+  accountPauseMessage,
   getAccountForUser,
   getDecryptedAccountCookie,
   isSessionExpiredError,
   listAccountsForUser,
   markAccountSessionExpired,
   normalizeUsername,
+  pauseActiveSchedulesForAccount,
   sanitizeAccount,
   setDefaultAccount,
+  shouldPauseSchedulesForAccountStatus,
   upsertAccountForUser,
   verifySessionCookie,
 };
