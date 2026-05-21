@@ -26,6 +26,25 @@
 
 Cookieは画面共有、ログ、履歴、リポジトリに残さないでください。
 
+## VPS runner
+
+本番イメージには、Cookieを非表示入力して live smoke だけを実行する
+runner も入っています。Cookie は標準入力で API コンテナへ渡し、Coolify の
+永続環境変数には保存しません。
+
+```bash
+api="$(docker ps --format '{{.Names}}' | grep '^api-sg008w80csw08skkwcwswwgw' | head -n 1)"
+docker cp "$api":/app/scripts/run-console-live-readonly-host.sh /tmp/xactions-live-readonly.sh
+bash /tmp/xactions-live-readonly.sh
+```
+
+登録済み active XAccount 2件を使う場合:
+
+```bash
+XACTIONS_LIVE_READONLY_SOURCE='existing' \
+bash /tmp/xactions-live-readonly.sh
+```
+
 ## VPSで実行する
 
 PowerShellからVPSへ入ります。
