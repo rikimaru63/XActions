@@ -372,6 +372,31 @@ describe('console scheduler helpers', () => {
     expect(route).not.toContain('config: JSON.stringify({ username, message })');
   });
 
+  it('keeps legacy DM route responses user-facing in Japanese', () => {
+    const route = readFileSync(new URL('../api/routes/messages.js', import.meta.url), 'utf8');
+
+    for (const text of [
+      'X連携が必要です。',
+      '送信先と本文を入力してください。',
+      'DM送信を予約しました。',
+      '会話一覧の取得を予約しました。',
+      'DMエクスポートを予約しました。',
+    ]) {
+      expect(route).toContain(text);
+    }
+
+    for (const text of [
+      'Twitter account not connected',
+      'Username and message are required',
+      'DM queued',
+      'Conversations fetch queued',
+      'DM export queued',
+      'Failed to send DM',
+    ]) {
+      expect(route).not.toContain(text);
+    }
+  });
+
   it('keeps legacy and console DM operations visible in the DM history filter', () => {
     expect(operationMatchesFeatureHistory({
       type: 'sendDM',

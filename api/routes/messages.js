@@ -12,12 +12,12 @@ router.use(authMiddleware);
 router.post('/send', async (req, res) => {
   try {
     if (!req.user.twitterAccessToken && !req.user.sessionCookie) {
-      return res.status(400).json({ error: 'Twitter account not connected' });
+      return res.status(400).json({ error: 'X連携が必要です。設定からXアカウントを連携してください。' });
     }
 
     const { username, message } = req.body;
     if (!username || !message) {
-      return res.status(400).json({ error: 'Username and message are required' });
+      return res.status(400).json({ error: '送信先と本文を入力してください。' });
     }
 
     const operation = await prisma.operation.create({
@@ -41,10 +41,10 @@ router.post('/send', async (req, res) => {
       config: { username, message, sessionCookie: req.user.sessionCookie },
     });
 
-    res.json({ operationId: operation.id, status: 'queued', message: 'DM queued' });
+    res.json({ operationId: operation.id, status: 'queued', message: 'DM送信を予約しました。' });
   } catch (error) {
     console.error('Send DM error:', error);
-    res.status(500).json({ error: 'Failed to send DM' });
+    res.status(500).json({ error: 'DMを送信できませんでした。' });
   }
 });
 
@@ -70,10 +70,10 @@ router.get('/conversations', async (req, res) => {
       config: { limit: parseInt(limit), sessionCookie: req.user.sessionCookie },
     });
 
-    res.json({ operationId: operation.id, status: 'queued', message: 'Conversations fetch queued' });
+    res.json({ operationId: operation.id, status: 'queued', message: '会話一覧の取得を予約しました。' });
   } catch (error) {
     console.error('Conversations error:', error);
-    res.status(500).json({ error: 'Failed to fetch conversations' });
+    res.status(500).json({ error: '会話一覧を取得できませんでした。' });
   }
 });
 
@@ -99,10 +99,10 @@ router.get('/export', async (req, res) => {
       config: { format, limit: parseInt(limit), sessionCookie: req.user.sessionCookie },
     });
 
-    res.json({ operationId: operation.id, status: 'queued', message: 'DM export queued' });
+    res.json({ operationId: operation.id, status: 'queued', message: 'DMエクスポートを予約しました。' });
   } catch (error) {
     console.error('Export DMs error:', error);
-    res.status(500).json({ error: 'Failed to export DMs' });
+    res.status(500).json({ error: 'DMをエクスポートできませんでした。' });
   }
 });
 
