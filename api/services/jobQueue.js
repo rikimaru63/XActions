@@ -325,6 +325,10 @@ function tweetUrlFromConfig(config) {
 }
 
 const getJobStatus = getJob;
+const isWorkerProcess = process.env.XACTIONS_WORKER === 'true'
+  || (process.argv[1] || '').replace(/\\/g, '/').endsWith('api/services/jobQueue.js');
+
+if (isWorkerProcess) {
 
 // Process jobs - unfollowNonFollowers
 operationsQueue.process('unfollowNonFollowers', 2, async (job) => {
@@ -686,6 +690,8 @@ setInterval(cleanupCancelledJobs, 3600000); // Every hour
 startScheduledActionScheduler(queueJob, {
   intervalMs: Number(process.env.SCHEDULED_ACTIONS_INTERVAL_MS) || 30000,
 });
+
+}
 
 export {
   addJob,

@@ -47,6 +47,7 @@ services:
       REDIS_HOST: redis
       REDIS_PORT: 6379
       JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET}
+      XACTIONS_WORKER: "true"
       PUPPETEER_EXECUTABLE_PATH: /usr/bin/chromium
       PUPPETEER_HEADLESS: "true"
       PUPPETEER_NO_SANDBOX: "true"
