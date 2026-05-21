@@ -51,6 +51,9 @@ function auditStaticAcceptance() {
   const accountSelection = read('api/services/accountSelection.js');
   const uiSmoke = read('scripts/smoke-console-ui.js');
   const accountUiSmoke = read('scripts/smoke-console-ui-accounts.js');
+  const liveAccountRegistration = read('scripts/register-console-live-accounts.js');
+  const liveAccountRegistrationHost = read('scripts/register-console-live-accounts-host.sh');
+  const liveSmokeDocs = read('docs/console-live-smoke.md');
   const workerRestartHost = read('scripts/smoke-console-worker-restart-host.sh');
   const productionSmoke = read('scripts/smoke-console-production-host.sh');
   const schema = read('prisma/schema.prisma');
@@ -143,6 +146,25 @@ function auditStaticAcceptance() {
     'hasDmMessage: !!dmMessage',
     '...(dmMessage ? { dmMessage } : {})',
   ]);
+
+  const liveAccountRegistrationMissing = hasAll(
+    liveAccountRegistration + liveAccountRegistrationHost + liveSmokeDocs + JSON.stringify(pkg.scripts || {}),
+    [
+      'register:console-live-accounts',
+      'for await (const chunk of process.stdin)',
+      'verifySessionCookie(account.cookie)',
+      'encryptedCookie: encrypt(account.cookie)',
+      'evaluateLiveReadiness',
+      'read -rsp "$prompt"',
+      'docker exec -i',
+      'register-console-live-accounts-host.sh',
+      "XACTIONS_LIVE_READONLY_SOURCE='existing'",
+    ]
+  );
+  if (liveAccountRegistration.includes('console.log(account.cookie')
+    || liveAccountRegistration.includes('console.log(cookie')) {
+    liveAccountRegistrationMissing.push('live account registration logs cookie material');
+  }
 
   const liveConfirmationMissing = hasAll(dashboard + uiSmoke, [
     'id="confirm-modal"',
@@ -358,6 +380,13 @@ function auditStaticAcceptance() {
       livePacingMissing.length === 0,
       { service: 'api/services/accountExecutionLock.js', cooldownMs: 60000 },
       livePacingMissing
+    ),
+    item(
+      'live-account-registration',
+      'Operators can register two real X accounts for the final live readonly E2E without logging cookies.',
+      liveAccountRegistrationMissing.length === 0,
+      { script: 'register:console-live-accounts', hostScript: 'register-console-live-accounts-host.sh' },
+      liveAccountRegistrationMissing
     ),
     item(
       'live-confirmation-modal',

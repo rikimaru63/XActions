@@ -253,6 +253,25 @@ describe('console scheduler helpers', () => {
     expect(script).toContain('run with SOURCE=diagnose');
   });
 
+  it('provides a safe operator path to register two live X accounts', () => {
+    const pkg = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
+    const registerScript = readFileSync(new URL('../scripts/register-console-live-accounts.js', import.meta.url), 'utf8');
+    const hostScript = readFileSync(new URL('../scripts/register-console-live-accounts-host.sh', import.meta.url), 'utf8');
+    const docs = readFileSync(new URL('../docs/console-live-smoke.md', import.meta.url), 'utf8');
+
+    expect(pkg.scripts['register:console-live-accounts']).toBe('node scripts/register-console-live-accounts.js');
+    expect(registerScript).toContain('for await (const chunk of process.stdin)');
+    expect(registerScript).toContain('verifySessionCookie(account.cookie)');
+    expect(registerScript).toContain('encryptedCookie: encrypt(account.cookie)');
+    expect(registerScript).toContain('evaluateLiveReadiness');
+    expect(registerScript).not.toContain('console.log(account.cookie');
+    expect(registerScript).not.toContain('console.log(cookie');
+    expect(hostScript).toContain('read -rsp "$prompt"');
+    expect(hostScript).toContain('docker exec -i');
+    expect(docs).toContain('register-console-live-accounts-host.sh');
+    expect(docs).toContain("XACTIONS_LIVE_READONLY_SOURCE='existing'");
+  });
+
   it('shows skipped run-now results and opens the run history', () => {
     const html = readFileSync(new URL('../dashboard/console.html', import.meta.url), 'utf8');
 

@@ -26,6 +26,27 @@
 
 Cookieは画面共有、ログ、履歴、リポジトリに残さないでください。
 
+## 実アカウントを先に登録する
+
+live readonly smoke を毎回 Cookie 入力なしで実行したい場合は、2つの実Xアカウントを
+テストユーザーへ登録します。Cookie は標準入力で API コンテナへ渡し、ログには出しません。
+登録時にヘッドレスブラウザでログイン状態を確認し、通った場合だけ `active` な
+XAccount として保存します。
+
+```bash
+api="$(docker ps --format '{{.Names}}' | grep '^api-sg008w80csw08skkwcwswwgw' | head -n 1)"
+docker cp "$api":/app/scripts/register-console-live-accounts-host.sh /tmp/xactions-register-live-accounts.sh
+bash /tmp/xactions-register-live-accounts.sh
+```
+
+登録後は、既存アカウントを使って smoke を実行できます。
+
+```bash
+api="$(docker ps --format '{{.Names}}' | grep '^api-sg008w80csw08skkwcwswwgw' | head -n 1)"
+docker cp "$api":/app/scripts/run-console-live-readonly-host.sh /tmp/xactions-live-readonly.sh
+XACTIONS_LIVE_READONLY_SOURCE='existing' bash /tmp/xactions-live-readonly.sh
+```
+
 ## VPS runner
 
 本番イメージには、Cookieを非表示入力して live smoke だけを実行する

@@ -84,6 +84,15 @@ Live readonly mode:
   run and fail loudly when accounts/cookies are missing.
 - `XACTIONS_PRODUCTION_LIVE_READONLY=never` skips the live readonly check.
 
+Before running the live readonly smoke with existing accounts, register two
+real X accounts for the smoke user without writing cookies to logs:
+
+```bash
+api="$(docker ps --format '{{.Names}}' | grep '^api-sg008w80csw08skkwcwswwgw' | head -n 1)"
+docker cp "$api":/app/scripts/register-console-live-accounts-host.sh /tmp/xactions-register-live-accounts.sh
+bash /tmp/xactions-register-live-accounts.sh
+```
+
 Examples:
 
 ```bash

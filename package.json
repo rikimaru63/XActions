@@ -57,6 +57,7 @@
     "smoke:console-legacy-session": "node scripts/smoke-console-legacy-session.js",
     "smoke:console-live-readonly": "node scripts/smoke-console-live-readonly.js",
     "smoke:console-live-readonly:diagnose": "node scripts/smoke-console-live-readonly.js --diagnose",
+    "register:console-live-accounts": "node scripts/register-console-live-accounts.js",
     "test:payment": "node scripts/test-x402-payment.js",
     "deploy": "bash scripts/deploy.sh",
     "deploy:railway": "bash scripts/deploy.sh railway",
