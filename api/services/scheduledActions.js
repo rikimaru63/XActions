@@ -358,6 +358,8 @@ function startScheduledActionScheduler(queueJobFn, options = {}) {
   if (schedulerTimer || process.env.SCHEDULED_ACTIONS_DISABLED === 'true') return schedulerTimer;
 
   const intervalMs = Math.max(Number(options.intervalMs) || 30000, 5000);
+  console.log(`📅 Scheduled action scheduler started (polling every ${Math.round(intervalMs / 1000)}s, id ${schedulerId})`);
+
   const tick = async () => {
     if (schedulerRunning) return;
     schedulerRunning = true;

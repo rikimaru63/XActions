@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { getFeatureById, getPublicFeatureCatalog } from '../api/config/features.js';
+import { shouldSerializeAccountJob } from '../api/services/accountExecutionLock.js';
 import { createActionPayload } from '../api/services/consoleActions.js';
 import { summarizeChildStatuses } from '../api/services/operationBatches.js';
 import { calculateNextRunAt } from '../api/services/scheduleUtils.js';
@@ -68,5 +69,21 @@ describe('console scheduler helpers', () => {
         failed: 1,
       },
     });
+  });
+
+  it('serializes only live account jobs', () => {
+    expect(shouldSerializeAccountJob({
+      accountId: 'acc_1',
+      config: { dryRun: false },
+    })).toBe(true);
+
+    expect(shouldSerializeAccountJob({
+      accountId: 'acc_1',
+      config: { dryRun: true },
+    })).toBe(false);
+
+    expect(shouldSerializeAccountJob({
+      config: { dryRun: false },
+    })).toBe(false);
   });
 });

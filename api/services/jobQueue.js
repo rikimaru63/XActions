@@ -20,6 +20,7 @@ import { targetEngageBrowser } from './operations/puppeteer/targetEngage.js';
 import browserAutomation from './browserAutomation.js';
 import { getDecryptedSessionCookie } from '../routes/session-auth.js';
 import { getDecryptedAccountCookie } from './accountStore.js';
+import { withAccountExecutionLock } from './accountExecutionLock.js';
 import { refreshParentOperationByChild } from './operationBatches.js';
 import { startScheduledActionScheduler } from './scheduledActions.js';
 
@@ -328,183 +329,205 @@ const getJobStatus = getJob;
 // Process jobs - unfollowNonFollowers
 operationsQueue.process('unfollowNonFollowers', 2, async (job) => {
   console.log(`🔄 Processing job ${job.id}: unfollowNonFollowers`);
-  
-  // Check if browser automation or API
-  if (job.data.authMethod === 'session') {
-    const config = await resolveJobConfig(job);
-    return await unfollowNonFollowersBrowser(
-      job.data.userId,
-      config,
-      (message) => job.progress(message),
-      () => isJobCancelled(job.data.operationId)
-    );
-  }
-  
-  return await processUnfollowNonFollowers(job.data, () => isJobCancelled(job.data.operationId));
+
+  return withAccountExecutionLock(operationsQueue.client, job, async () => {
+    // Check if browser automation or API
+    if (job.data.authMethod === 'session') {
+      const config = await resolveJobConfig(job);
+      return await unfollowNonFollowersBrowser(
+        job.data.userId,
+        config,
+        (message) => job.progress(message),
+        () => isJobCancelled(job.data.operationId)
+      );
+    }
+
+    return await processUnfollowNonFollowers(job.data, () => isJobCancelled(job.data.operationId));
+  });
 });
 
 // Process jobs - unfollowEveryone
 operationsQueue.process('unfollowEveryone', 2, async (job) => {
   console.log(`🔄 Processing job ${job.id}: unfollowEveryone`);
-  
-  if (job.data.authMethod === 'session') {
-    const config = await resolveJobConfig(job);
-    return await unfollowEveryoneBrowser(
-      job.data.userId,
-      config,
-      (message) => job.progress(message),
-      () => isJobCancelled(job.data.operationId)
-    );
-  }
-  
-  return await processUnfollowEveryone(job.data, () => isJobCancelled(job.data.operationId));
+
+  return withAccountExecutionLock(operationsQueue.client, job, async () => {
+    if (job.data.authMethod === 'session') {
+      const config = await resolveJobConfig(job);
+      return await unfollowEveryoneBrowser(
+        job.data.userId,
+        config,
+        (message) => job.progress(message),
+        () => isJobCancelled(job.data.operationId)
+      );
+    }
+
+    return await processUnfollowEveryone(job.data, () => isJobCancelled(job.data.operationId));
+  });
 });
 
 // Process jobs - detectUnfollowers
 operationsQueue.process('detectUnfollowers', 3, async (job) => {
   console.log(`🔄 Processing job ${job.id}: detectUnfollowers`);
-  
-  if (job.data.authMethod === 'session') {
-    const config = await resolveJobConfig(job);
-    return await detectUnfollowersBrowser(
-      job.data.userId,
-      config,
-      (message) => job.progress(message),
-      () => isJobCancelled(job.data.operationId)
-    );
-  }
-  
-  return await processDetectUnfollowers(job.data, () => isJobCancelled(job.data.operationId));
+
+  return withAccountExecutionLock(operationsQueue.client, job, async () => {
+    if (job.data.authMethod === 'session') {
+      const config = await resolveJobConfig(job);
+      return await detectUnfollowersBrowser(
+        job.data.userId,
+        config,
+        (message) => job.progress(message),
+        () => isJobCancelled(job.data.operationId)
+      );
+    }
+
+    return await processDetectUnfollowers(job.data, () => isJobCancelled(job.data.operationId));
+  });
 });
 
 // Process jobs - autoLike
 operationsQueue.process('autoLike', 2, async (job) => {
   console.log(`🔄 Processing job ${job.id}: autoLike`);
-  
-  if (job.data.authMethod === 'session') {
-    const config = await resolveJobConfig(job);
-    return await autoLikeBrowser(
-      job.data.userId,
-      config,
-      (message) => job.progress(message),
-      () => isJobCancelled(job.data.operationId)
-    );
-  }
-  
-  return await processAutoLike(job.data, () => isJobCancelled(job.data.operationId));
+
+  return withAccountExecutionLock(operationsQueue.client, job, async () => {
+    if (job.data.authMethod === 'session') {
+      const config = await resolveJobConfig(job);
+      return await autoLikeBrowser(
+        job.data.userId,
+        config,
+        (message) => job.progress(message),
+        () => isJobCancelled(job.data.operationId)
+      );
+    }
+
+    return await processAutoLike(job.data, () => isJobCancelled(job.data.operationId));
+  });
 });
 
 // Process jobs - followEngagers
 operationsQueue.process('followEngagers', 2, async (job) => {
   console.log(`🔄 Processing job ${job.id}: followEngagers`);
-  
-  if (job.data.authMethod === 'session') {
-    const config = await resolveJobConfig(job);
-    return await followEngagersBrowser(
-      job.data.userId,
-      config,
-      (message) => job.progress(message),
-      () => isJobCancelled(job.data.operationId)
-    );
-  }
-  
-  return await processFollowEngagers(job.data, () => isJobCancelled(job.data.operationId));
+
+  return withAccountExecutionLock(operationsQueue.client, job, async () => {
+    if (job.data.authMethod === 'session') {
+      const config = await resolveJobConfig(job);
+      return await followEngagersBrowser(
+        job.data.userId,
+        config,
+        (message) => job.progress(message),
+        () => isJobCancelled(job.data.operationId)
+      );
+    }
+
+    return await processFollowEngagers(job.data, () => isJobCancelled(job.data.operationId));
+  });
 });
 
 // Process jobs - keywordFollow
 operationsQueue.process('keywordFollow', 2, async (job) => {
   console.log(`🔄 Processing job ${job.id}: keywordFollow`);
-  
-  if (job.data.authMethod === 'session') {
-    const config = await resolveJobConfig(job);
-    return await keywordFollowBrowser(
-      job.data.userId,
-      config,
-      (message) => job.progress(message),
-      () => isJobCancelled(job.data.operationId)
-    );
-  }
-  
-  return await processKeywordFollow(job.data, () => isJobCancelled(job.data.operationId));
+
+  return withAccountExecutionLock(operationsQueue.client, job, async () => {
+    if (job.data.authMethod === 'session') {
+      const config = await resolveJobConfig(job);
+      return await keywordFollowBrowser(
+        job.data.userId,
+        config,
+        (message) => job.progress(message),
+        () => isJobCancelled(job.data.operationId)
+      );
+    }
+
+    return await processKeywordFollow(job.data, () => isJobCancelled(job.data.operationId));
+  });
 });
 
 // Process jobs - autoComment
 operationsQueue.process('autoComment', 2, async (job) => {
   console.log(`🔄 Processing job ${job.id}: autoComment`);
-  
-  if (job.data.authMethod === 'session') {
-    const config = await resolveJobConfig(job);
-    return await autoCommentBrowser(
-      job.data.userId,
-      config,
-      (message) => job.progress(message),
-      () => isJobCancelled(job.data.operationId)
-    );
-  }
-  
-  return await processAutoComment(job.data, () => isJobCancelled(job.data.operationId));
+
+  return withAccountExecutionLock(operationsQueue.client, job, async () => {
+    if (job.data.authMethod === 'session') {
+      const config = await resolveJobConfig(job);
+      return await autoCommentBrowser(
+        job.data.userId,
+        config,
+        (message) => job.progress(message),
+        () => isJobCancelled(job.data.operationId)
+      );
+    }
+
+    return await processAutoComment(job.data, () => isJobCancelled(job.data.operationId));
+  });
 });
 
 // Process jobs - explicit target actions (like latest posts, follow, DM)
 operationsQueue.process('targetEngage', 1, async (job) => {
   console.log(`🔄 Processing job ${job.id}: targetEngage`);
 
-  const config = await resolveJobConfig(job);
-  return await targetEngageBrowser(
-    job.data.userId,
-    config,
-    (message) => job.progress(message),
-    () => isJobCancelled(job.data.operationId)
-  );
+  return withAccountExecutionLock(operationsQueue.client, job, async () => {
+    const config = await resolveJobConfig(job);
+    return await targetEngageBrowser(
+      job.data.userId,
+      config,
+      (message) => job.progress(message),
+      () => isJobCancelled(job.data.operationId)
+    );
+  });
 });
 
 // Process jobs - direct tweet engagement
 operationsQueue.process('likeTweet', 2, async (job) => {
   console.log(`🔄 Processing job ${job.id}: likeTweet`);
 
-  const config = await resolveJobConfig(job);
-  const page = await browserAutomation.createPage(config.sessionCookie);
+  return withAccountExecutionLock(operationsQueue.client, job, async () => {
+    const config = await resolveJobConfig(job);
+    const page = await browserAutomation.createPage(config.sessionCookie);
 
-  try {
-    await browserAutomation.navigateToTwitter(page);
-    const isAuthenticated = await browserAutomation.checkAuthentication(page);
-    if (!isAuthenticated) throw new Error('Session expired - please reconnect your X account');
-    return await browserAutomation.likePost(page, tweetUrlFromConfig(config));
-  } finally {
-    await page.close();
-  }
+    try {
+      await browserAutomation.navigateToTwitter(page);
+      const isAuthenticated = await browserAutomation.checkAuthentication(page);
+      if (!isAuthenticated) throw new Error('Session expired - please reconnect your X account');
+      return await browserAutomation.likePost(page, tweetUrlFromConfig(config));
+    } finally {
+      await page.close();
+    }
+  });
 });
 
 operationsQueue.process('unlikeTweet', 2, async (job) => {
   console.log(`🔄 Processing job ${job.id}: unlikeTweet`);
 
-  const config = await resolveJobConfig(job);
-  const page = await browserAutomation.createPage(config.sessionCookie);
+  return withAccountExecutionLock(operationsQueue.client, job, async () => {
+    const config = await resolveJobConfig(job);
+    const page = await browserAutomation.createPage(config.sessionCookie);
 
-  try {
-    await browserAutomation.navigateToTwitter(page);
-    const isAuthenticated = await browserAutomation.checkAuthentication(page);
-    if (!isAuthenticated) throw new Error('Session expired - please reconnect your X account');
-    return await browserAutomation.unlikePost(page, tweetUrlFromConfig(config));
-  } finally {
-    await page.close();
-  }
+    try {
+      await browserAutomation.navigateToTwitter(page);
+      const isAuthenticated = await browserAutomation.checkAuthentication(page);
+      if (!isAuthenticated) throw new Error('Session expired - please reconnect your X account');
+      return await browserAutomation.unlikePost(page, tweetUrlFromConfig(config));
+    } finally {
+      await page.close();
+    }
+  });
 });
 
 operationsQueue.process('sendDM', 1, async (job) => {
   console.log(`🔄 Processing job ${job.id}: sendDM`);
 
-  const config = await resolveJobConfig(job);
-  const page = await browserAutomation.createPage(config.sessionCookie);
+  return withAccountExecutionLock(operationsQueue.client, job, async () => {
+    const config = await resolveJobConfig(job);
+    const page = await browserAutomation.createPage(config.sessionCookie);
 
-  try {
-    await browserAutomation.navigateToTwitter(page);
-    const isAuthenticated = await browserAutomation.checkAuthentication(page);
-    if (!isAuthenticated) throw new Error('Session expired - please reconnect your X account');
-    return await browserAutomation.sendDM(page, config.username, config.message);
-  } finally {
-    await page.close();
-  }
+    try {
+      await browserAutomation.navigateToTwitter(page);
+      const isAuthenticated = await browserAutomation.checkAuthentication(page);
+      if (!isAuthenticated) throw new Error('Session expired - please reconnect your X account');
+      return await browserAutomation.sendDM(page, config.username, config.message);
+    } finally {
+      await page.close();
+    }
+  });
 });
 
 // Job event handlers
