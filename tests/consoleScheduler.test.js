@@ -178,6 +178,54 @@ describe('console scheduler helpers', () => {
     expect(commentPayload.jobConfig.comment).toBe('確認用コメント');
   });
 
+  it('connects read-only collection actions to the console catalog', () => {
+    for (const id of ['getProfile', 'searchTweets', 'getTrends', 'getBookmarks', 'getConversations']) {
+      const featureId = {
+        getProfile: 'profile',
+        searchTweets: 'searchTweets',
+        getTrends: 'trends',
+        getBookmarks: 'bookmarks',
+        getConversations: 'conversations',
+      }[id];
+      expect(getFeatureById(featureId)).toMatchObject({
+        status: 'available',
+        consoleAction: id,
+        supportsDryRun: true,
+        supportsSchedule: true,
+      });
+    }
+  });
+
+  it('builds payloads for read-only collection actions', () => {
+    const profile = createActionPayload(
+      getFeatureById('profile'),
+      { username: '@target_user' },
+      'live'
+    );
+    expect(profile).toMatchObject({
+      operationType: 'getProfile',
+      jobConfig: {
+        username: 'target_user',
+        dryRun: true,
+      },
+    });
+
+    const search = createActionPayload(
+      getFeatureById('searchTweets'),
+      { query: 'xactions', limit: 5, filter: 'top' },
+      'dryRun'
+    );
+    expect(search).toMatchObject({
+      operationType: 'searchTweets',
+      jobConfig: {
+        query: 'xactions',
+        limit: 5,
+        filter: 'top',
+        dryRun: true,
+      },
+    });
+  });
+
   it('maps schedule retry settings to queue attempts', () => {
     expect(normalizeScheduleMaxRetries(undefined)).toBe(2);
     expect(normalizeScheduleMaxRetries(0)).toBe(0);

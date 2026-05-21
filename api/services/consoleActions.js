@@ -239,6 +239,102 @@ function createActionPayload(feature, inputConfig, mode = 'dryRun', user = {}) {
       };
     }
 
+    case 'getProfile': {
+      const username = normalizeUsername(config.username);
+      if (!username) throw new Error('対象ユーザーを入力してください。');
+
+      return {
+        operationType: 'getProfile',
+        operationConfig: {
+          sourceFeatureId: feature.id,
+          username,
+          dryRun: true,
+        },
+        jobConfig: {
+          username,
+          dryRun: true,
+        },
+      };
+    }
+
+    case 'searchTweets': {
+      const query = String(config.query || '').trim();
+      const limit = asNumber(config.limit, 30, 1, 100);
+      const filter = String(config.filter || 'latest').trim() || 'latest';
+      if (!query) throw new Error('検索語句を入力してください。');
+
+      return {
+        operationType: 'searchTweets',
+        operationConfig: {
+          sourceFeatureId: feature.id,
+          query,
+          limit,
+          filter,
+          dryRun: true,
+        },
+        jobConfig: {
+          query,
+          limit,
+          filter,
+          dryRun: true,
+        },
+      };
+    }
+
+    case 'getTrends': {
+      const category = String(config.category || '').trim();
+
+      return {
+        operationType: 'getTrends',
+        operationConfig: {
+          sourceFeatureId: feature.id,
+          category,
+          dryRun: true,
+        },
+        jobConfig: {
+          category,
+          dryRun: true,
+        },
+      };
+    }
+
+    case 'getBookmarks': {
+      const limit = asNumber(config.limit, 50, 1, 200);
+      const format = String(config.format || 'json').trim() === 'csv' ? 'csv' : 'json';
+
+      return {
+        operationType: 'getBookmarks',
+        operationConfig: {
+          sourceFeatureId: feature.id,
+          limit,
+          format,
+          dryRun: true,
+        },
+        jobConfig: {
+          limit,
+          format,
+          dryRun: true,
+        },
+      };
+    }
+
+    case 'getConversations': {
+      const limit = asNumber(config.limit, 20, 1, 100);
+
+      return {
+        operationType: 'getConversations',
+        operationConfig: {
+          sourceFeatureId: feature.id,
+          limit,
+          dryRun: true,
+        },
+        jobConfig: {
+          limit,
+          dryRun: true,
+        },
+      };
+    }
+
     case 'detectUnfollowers': {
       const username = normalizeUsername(config.username || user.twitterUsername);
       const maxUsers = asNumber(config.maxUsers, 1000, 50, 5000);

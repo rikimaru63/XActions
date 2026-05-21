@@ -17,7 +17,13 @@ import { followEngagersBrowser } from './operations/puppeteer/followEngagers.js'
 import { keywordFollowBrowser } from './operations/puppeteer/keywordFollow.js';
 import { autoCommentBrowser } from './operations/puppeteer/autoComment.js';
 import { targetEngageBrowser } from './operations/puppeteer/targetEngage.js';
-import browserAutomation from './browserAutomation.js';
+import browserAutomation, {
+  scrapeProfile,
+  searchTweets as searchTweetsWithCookie,
+} from './browserAutomation.js';
+import { getBookmarks } from '../../src/bookmarkManager.js';
+import { getTrends } from '../../src/discoveryExplore.js';
+import { getConversations } from '../../src/dmManager.js';
 import { getDecryptedSessionCookie } from '../routes/session-auth.js';
 import { getAccountForUser, getDecryptedAccountCookie, markAccountSessionExpired } from './accountStore.js';
 import { withAccountExecutionLock } from './accountExecutionLock.js';
@@ -473,6 +479,63 @@ operationsQueue.process('autoComment', 2, async (job) => {
 
     return await processAutoComment(job.data, () => isJobCancelled(job.data.operationId));
   });
+});
+
+// Process jobs - read-only collection actions
+operationsQueue.process('getProfile', 2, async (job) => {
+  console.log(`🔄 Processing job ${job.id}: getProfile`);
+
+  const config = await resolveJobConfig(job);
+  return scrapeProfile(config.sessionCookie, config.username);
+});
+
+operationsQueue.process('searchTweets', 2, async (job) => {
+  console.log(`🔄 Processing job ${job.id}: searchTweets`);
+
+  const config = await resolveJobConfig(job);
+  return searchTweetsWithCookie(config.sessionCookie, config.query, {
+    limit: config.limit,
+    filter: config.filter,
+  });
+});
+
+operationsQueue.process('getTrends', 1, async (job) => {
+  console.log(`🔄 Processing job ${job.id}: getTrends`);
+
+  const config = await resolveJobConfig(job);
+  const page = await browserAutomation.createPage(config.sessionCookie);
+  try {
+    return getTrends(page, { location: config.category || 'global' });
+  } finally {
+    await page.close();
+  }
+});
+
+operationsQueue.process('getBookmarks', 1, async (job) => {
+  console.log(`🔄 Processing job ${job.id}: getBookmarks`);
+
+  const config = await resolveJobConfig(job);
+  const page = await browserAutomation.createPage(config.sessionCookie);
+  try {
+    return getBookmarks(page, {
+      limit: config.limit,
+      format: config.format,
+    });
+  } finally {
+    await page.close();
+  }
+});
+
+operationsQueue.process('getConversations', 1, async (job) => {
+  console.log(`🔄 Processing job ${job.id}: getConversations`);
+
+  const config = await resolveJobConfig(job);
+  const page = await browserAutomation.createPage(config.sessionCookie);
+  try {
+    return getConversations(page, { limit: config.limit });
+  } finally {
+    await page.close();
+  }
 });
 
 // Process jobs - explicit target actions (like latest posts, follow, DM)
