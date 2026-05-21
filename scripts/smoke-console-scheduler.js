@@ -83,6 +83,30 @@ async function requestJson(path, options = {}) {
   return body;
 }
 
+async function requestJsonExpectFailure(path, options = {}, expectedStatus = 400) {
+  const response = await fetch(`${baseUrl}${path}`, {
+    method: options.method || 'GET',
+    headers: {
+      authorization: `Bearer ${options.token}`,
+      ...(options.body ? { 'content-type': 'application/json' } : {}),
+      ...(options.headers || {}),
+    },
+    body: options.body ? JSON.stringify(options.body) : undefined,
+  });
+  const text = await response.text();
+  let body = null;
+  try {
+    body = text ? JSON.parse(text) : {};
+  } catch {
+    body = { raw: text };
+  }
+  assert(
+    response.status === expectedStatus,
+    `${options.method || 'GET'} ${path} expected HTTP ${expectedStatus}, got ${response.status}: ${body?.error || text}`
+  );
+  return { status: response.status, body };
+}
+
 async function resolveSmokeUser() {
   const user = await prisma.user.findUnique({
     where: { username: smokeUsername },
@@ -300,6 +324,100 @@ async function createSmokeAccounts(userId) {
   return accounts;
 }
 
+async function createExpiredSmokeAccount(userId) {
+  const account = await prisma.xAccount.create({
+    data: {
+      userId,
+      username: `${accountPrefix}expired_${smokeId}`,
+      displayName: 'Smoke Expired Account',
+      encryptedCookie: encrypt(`auth_token=${smokeId}_expired; ct0=${smokeId}_expired_csrf`),
+      authMethod: 'session',
+      status: 'expired',
+      isDefault: false,
+      lastVerifiedAt: new Date(Date.now() - 24 * 60 * 60 * 1000),
+      error: 'Smoke expired session',
+    },
+    select: {
+      id: true,
+      username: true,
+      status: true,
+    },
+  });
+  created.accountIds.push(account.id);
+  return account;
+}
+
+async function exerciseUnavailableAccountGuard(token, account) {
+  const before = {
+    operations: await prisma.operation.count({ where: { accountId: account.id } }),
+    schedules: await prisma.scheduledAction.count({ where: { accountId: account.id } }),
+  };
+
+  const listResponse = await requestJson('/api/console/accounts', { token });
+  const listed = listResponse.accounts.find((item) => item.id === account.id);
+  assert(listed, 'Expired account is not visible from /api/console/accounts.');
+  assert(listed.status === 'expired', `Expired account status was not exposed: ${listed.status}`);
+  assert(listed.statusLabel, 'Expired account statusLabel was not exposed.');
+  assert(listed.error === 'Smoke expired session', 'Expired account error was not exposed.');
+
+  const executeFailure = await requestJsonExpectFailure('/api/console/actions/execute', {
+    method: 'POST',
+    token,
+    body: {
+      featureId: 'postTweet',
+      mode: 'dryRun',
+      accountIds: [account.id],
+      config: {
+        text: `[${smokeId}] expired account execution rejection`,
+      },
+    },
+  });
+  assert(executeFailure.body?.error, 'Expired account execute failure did not include an error message.');
+
+  const runAt = new Date(Date.now() + 60 * 60 * 1000).toISOString();
+  const scheduleFailure = await requestJsonExpectFailure('/api/console/actions/schedule', {
+    method: 'POST',
+    token,
+    body: {
+      featureId: 'postTweet',
+      mode: 'dryRun',
+      name: `Console expired guard smoke ${smokeId}`,
+      accountIds: [account.id],
+      config: {
+        text: `[${smokeId}] expired account schedule rejection`,
+      },
+      schedule: {
+        type: 'once',
+        runAt,
+        timezone: 'Asia/Tokyo',
+      },
+    },
+  });
+  assert(scheduleFailure.body?.error, 'Expired account schedule failure did not include an error message.');
+
+  const after = {
+    operations: await prisma.operation.count({ where: { accountId: account.id } }),
+    schedules: await prisma.scheduledAction.count({ where: { accountId: account.id } }),
+  };
+  assert(
+    before.operations === after.operations && before.schedules === after.schedules,
+    `Expired account rejection left residue: ${JSON.stringify({ before, after })}`
+  );
+
+  return {
+    accountId: account.id,
+    status: listed.status,
+    hasStatusLabel: !!listed.statusLabel,
+    hasError: !!listed.error,
+    executeStatus: executeFailure.status,
+    scheduleStatus: scheduleFailure.status,
+    residue: {
+      operations: after.operations - before.operations,
+      schedules: after.schedules - before.schedules,
+    },
+  };
+}
+
 async function pollOperations(operationIds, label) {
   const result = await waitFor(label, async () => {
     const operations = await prisma.operation.findMany({
@@ -459,6 +577,7 @@ async function main() {
   const token = await resolveToken(user);
   const staleCleanup = await cleanupSmokeRows(user.id, { stale: true, staleHours: 24 });
   const accounts = await createSmokeAccounts(user.id);
+  const expiredAccount = await createExpiredSmokeAccount(user.id);
   const accountIds = accounts.map((account) => account.id);
 
   const accountsResponse = await requestJson('/api/console/accounts', { token });
@@ -467,6 +586,7 @@ async function main() {
     'Temporary accounts are not visible from /api/console/accounts.'
   );
   const accountApi = await exerciseAccountApi(token, accounts);
+  const unavailableAccountGuard = await exerciseUnavailableAccountGuard(token, expiredAccount);
 
   const executeResponse = await requestJson('/api/console/actions/execute', {
     method: 'POST',
@@ -589,6 +709,7 @@ async function main() {
       ...accountApi,
       deletes: accountDeletes,
     },
+    unavailableAccountGuard,
     immediate: {
       parentOperationId: executeResponse.parentOperationId,
       parentStatus: parent.operation.status,
