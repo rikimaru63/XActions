@@ -40,6 +40,7 @@ function auditStaticAcceptance() {
   const sessionAuthRoute = read('api/routes/session-auth.js');
   const scheduledRoute = read('api/routes/scheduled-actions.js');
   const scheduledService = read('api/services/scheduledActions.js');
+  const consoleActions = read('api/services/consoleActions.js');
   const jobQueue = read('api/services/jobQueue.js');
   const queuePayload = read('api/services/queuePayload.js');
   const accountStore = read('api/services/accountStore.js');
@@ -63,6 +64,20 @@ function auditStaticAcceptance() {
   const unavailableFeatures = features.filter((feature) => feature.status !== 'available');
   const missingConsoleActions = executableFeatures.filter((feature) => !feature.consoleAction);
   const missingScheduleSupport = executableFeatures.filter((feature) => !feature.supportsSchedule);
+  const sendDmFeature = features.find((feature) => feature.id === 'sendDM');
+
+  const dedicatedDmMissing = [
+    ...(!sendDmFeature ? ['sendDM feature missing'] : []),
+    ...(sendDmFeature?.operationType !== 'sendDM' ? [`operationType=${sendDmFeature?.operationType}`] : []),
+    ...(sendDmFeature?.queueType !== 'sendDM' ? [`queueType=${sendDmFeature?.queueType}`] : []),
+    ...(sendDmFeature?.supportsDryRun !== false ? ['sendDM should be live-only'] : []),
+    ...hasAll(consoleActions + jobQueue, [
+      "case 'sendDM'",
+      "operationType: 'sendDM'",
+      'messageLength: dmMessage.length',
+      "operationsQueue.process('sendDM'",
+    ]),
+  ];
 
   const detailMissing = hasAll(dashboard, [
     'id="feature-list"',
@@ -194,6 +209,13 @@ function auditStaticAcceptance() {
         ...missingScheduleSupport.map((feature) => `${feature.id}: missing supportsSchedule`),
         ...missingProcessors.map((type) => `${type}: missing worker processor`),
       ]
+    ),
+    item(
+      'dedicated-dm-processor',
+      'DM送信 uses the dedicated sendDM worker and is treated as a live-only action.',
+      dedicatedDmMissing.length === 0,
+      { feature: 'sendDM', processor: 'sendDM' },
+      dedicatedDmMissing
     ),
     item(
       'feature-detail-navigation',

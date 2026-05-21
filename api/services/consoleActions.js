@@ -103,31 +103,28 @@ function createActionPayload(feature, inputConfig, mode = 'dryRun', user = {}) {
     }
 
     case 'sendDM': {
+      if (dryRun) {
+        throw new Error('DM送信は確認のみには対応していません。実行を選んでください。');
+      }
+
       const targetUsername = normalizeUsername(config.username);
       const dmMessage = String(config.message || '').trim();
-      const delayMs = asNumber(config.delayMs, 3000, 2000, 60000);
 
       if (!targetUsername) throw new Error('送信先を入力してください。');
       if (!dmMessage) throw new Error('本文を入力してください。');
 
       return {
-        operationType: 'targetEngage',
+        operationType: 'sendDM',
         operationConfig: {
           sourceFeatureId: feature.id,
-          targetUsername,
-          likeCount: 0,
-          follow: false,
-          hasDmMessage: true,
-          dryRun,
-          delayMs,
+          username: targetUsername,
+          hasMessage: true,
+          messageLength: dmMessage.length,
         },
         jobConfig: {
-          targetUsername,
-          likeCount: 0,
-          follow: false,
-          dmMessage,
-          dryRun,
-          delayMs,
+          username: targetUsername,
+          message: dmMessage,
+          dryRun: false,
         },
       };
     }

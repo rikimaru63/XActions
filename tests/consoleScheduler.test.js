@@ -191,20 +191,32 @@ describe('console scheduler helpers', () => {
   });
 
   it('keeps DM body out of operation config', () => {
-    const payload = createActionPayload(
+    expect(getFeatureById('sendDM')).toMatchObject({
+      operationType: 'sendDM',
+      queueType: 'sendDM',
+      supportsDryRun: false,
+    });
+    expect(() => createActionPayload(
       getFeatureById('sendDM'),
       { username: '@target_user', message: 'hello' },
       'dryRun'
+    )).toThrow('DM送信は確認のみには対応していません。');
+
+    const payload = createActionPayload(
+      getFeatureById('sendDM'),
+      { username: '@target_user', message: 'hello' },
+      'live'
     );
 
-    expect(payload.operationType).toBe('targetEngage');
+    expect(payload.operationType).toBe('sendDM');
     expect(payload.operationConfig).toMatchObject({
       sourceFeatureId: 'sendDM',
-      targetUsername: 'target_user',
-      hasDmMessage: true,
+      username: 'target_user',
+      hasMessage: true,
+      messageLength: 5,
     });
-    expect(payload.operationConfig.dmMessage).toBeUndefined();
-    expect(payload.jobConfig.dmMessage).toBe('hello');
+    expect(payload.operationConfig.message).toBeUndefined();
+    expect(payload.jobConfig.message).toBe('hello');
   });
 
   it('exposes X account management inside the console catalog', () => {
