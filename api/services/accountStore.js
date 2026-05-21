@@ -37,6 +37,11 @@ function accountStatusLabel(status) {
   }[status] || status || '-';
 }
 
+function isSessionExpiredError(error) {
+  const message = String(error?.message || error || '').toLowerCase();
+  return /session expired|invalid session|authentication failed|login required|please reconnect|ログイン状態|ログインでき|期限切れ/.test(message);
+}
+
 async function ensureSingleDefault(userId, accountId) {
   await prisma.xAccount.updateMany({
     where: { userId, id: { not: accountId } },
@@ -139,7 +144,7 @@ async function getDecryptedAccountCookie(userId, accountId) {
       where: { id: account.id },
       data: {
         status: 'error',
-        error: '保存済み cookie を復号できませんでした。',
+        error: '保存済みのX連携情報を読み取れませんでした。',
       },
     }).catch(() => {});
 
@@ -156,6 +161,42 @@ async function getDecryptedAccountCookie(userId, accountId) {
   });
 
   return user?.sessionCookie ? decrypt(user.sessionCookie) : null;
+}
+
+async function markAccountSessionExpired(userId, accountId, error) {
+  if (!userId || !accountId || !isSessionExpiredError(error)) return false;
+
+  const message = 'Xのログイン状態が切れました。連携情報を更新してください。';
+  const updated = await prisma.xAccount.updateMany({
+    where: {
+      id: accountId,
+      userId,
+      status: { not: 'disabled' },
+    },
+    data: {
+      status: 'expired',
+      lastVerifiedAt: new Date(),
+      error: message,
+    },
+  });
+
+  if (updated.count !== 1) return false;
+
+  await prisma.scheduledAction.updateMany({
+    where: {
+      userId,
+      accountId,
+      status: 'active',
+    },
+    data: {
+      status: 'paused',
+      lockedAt: null,
+      lockedBy: null,
+      lastError: message,
+    },
+  }).catch(() => {});
+
+  return true;
 }
 
 async function verifySessionCookie(sessionCookie) {
@@ -240,7 +281,9 @@ export {
   ensureDefaultAccountForUser,
   getAccountForUser,
   getDecryptedAccountCookie,
+  isSessionExpiredError,
   listAccountsForUser,
+  markAccountSessionExpired,
   normalizeUsername,
   sanitizeAccount,
   setDefaultAccount,

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { getFeatureById, getPublicFeatureCatalog } from '../api/config/features.js';
 import { shouldSerializeAccountJob } from '../api/services/accountExecutionLock.js';
+import { isSessionExpiredError } from '../api/services/accountStore.js';
 import { createActionPayload } from '../api/services/consoleActions.js';
 import { summarizeChildStatuses } from '../api/services/operationBatches.js';
 import { calculateNextRunAt } from '../api/services/scheduleUtils.js';
@@ -85,5 +86,11 @@ describe('console scheduler helpers', () => {
     expect(shouldSerializeAccountJob({
       config: { dryRun: false },
     })).toBe(false);
+  });
+
+  it('detects X session expiration errors', () => {
+    expect(isSessionExpiredError(new Error('Session expired - please reconnect your X account'))).toBe(true);
+    expect(isSessionExpiredError('X連携情報でログイン状態を確認できませんでした。')).toBe(true);
+    expect(isSessionExpiredError(new Error('Like button not found'))).toBe(false);
   });
 });

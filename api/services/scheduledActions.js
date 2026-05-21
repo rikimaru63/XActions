@@ -196,7 +196,7 @@ async function enqueueScheduledAction(schedule, queueJobFn, options = {}) {
       return skipScheduledAction(
         fullSchedule,
         scheduledFor,
-        `@${fullSchedule.account.username} の session cookie を取得できませんでした。`,
+        `@${fullSchedule.account.username} のX連携情報を取得できませんでした。`,
         options
       );
     }

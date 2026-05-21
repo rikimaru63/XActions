@@ -19,7 +19,7 @@ import { autoCommentBrowser } from './operations/puppeteer/autoComment.js';
 import { targetEngageBrowser } from './operations/puppeteer/targetEngage.js';
 import browserAutomation from './browserAutomation.js';
 import { getDecryptedSessionCookie } from '../routes/session-auth.js';
-import { getDecryptedAccountCookie } from './accountStore.js';
+import { getDecryptedAccountCookie, markAccountSessionExpired } from './accountStore.js';
 import { withAccountExecutionLock } from './accountExecutionLock.js';
 import { refreshParentOperationByChild } from './operationBatches.js';
 import { startScheduledActionScheduler } from './scheduledActions.js';
@@ -296,7 +296,7 @@ async function resolveJobConfig(job) {
       ? await getDecryptedAccountCookie(job.data.userId, job.data.accountId).catch(() => null)
       : null;
 
-    if (!accountCookie) throw new Error('Xアカウントの session cookie を取得できませんでした。');
+    if (!accountCookie) throw new Error('Xアカウントの連携情報を取得できませんでした。');
 
     return {
       ...config,
@@ -628,6 +628,10 @@ operationsQueue.on('failed', async (job, err) => {
       error: err.message,
       retryCount: job.attemptsMade
     }
+  });
+
+  await markAccountSessionExpired(job.data.userId, job.data.accountId, err).catch((error) => {
+    console.error(`Failed to mark X account expired: ${job.id}`, error);
   });
 
   await refreshParentOperationByChild(job.data.operationId).catch((error) => {
