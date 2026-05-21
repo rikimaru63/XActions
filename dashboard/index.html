@@ -525,6 +525,7 @@
     }
 
     .operation-card {
+      display: block;
       background: var(--bg-secondary);
       border: 1px solid var(--border);
       border-radius: 16px;
@@ -532,6 +533,8 @@
       margin-bottom: 12px;
       cursor: pointer;
       transition: all 0.2s;
+      color: inherit;
+      text-decoration: none;
     }
 
     .operation-card:hover {
@@ -1239,6 +1242,28 @@
           <div id="live-log" aria-live="polite" aria-label="Operation log" style="margin-top: 16px; background: var(--bg-primary); border-radius: 8px; padding: 12px; max-height: 150px; overflow-y: auto; font-family: monospace; font-size: 0.75rem;">
           </div>
         </div>
+
+        <a class="operation-card" href="/actions?mode=dm" aria-label="Send DM">
+          <div class="operation-header">
+            <span class="operation-icon" aria-hidden="true">DM</span>
+            <div class="operation-info">
+              <div class="operation-title">Send DM</div>
+              <div class="operation-desc">Send one direct message to a selected X user.</div>
+            </div>
+            <span class="operation-cost" style="background: var(--success);">Free</span>
+          </div>
+        </a>
+
+        <a class="operation-card" href="/actions" aria-label="Target Like Follow DM">
+          <div class="operation-header">
+            <span class="operation-icon" aria-hidden="true">ACT</span>
+            <div class="operation-info">
+              <div class="operation-title">Target Like / Follow / DM</div>
+              <div class="operation-desc">Run explicit actions against one target username.</div>
+            </div>
+            <span class="operation-cost" style="background: var(--success);">Free</span>
+          </div>
+        </a>
 
         <div class="operation-card" role="button" tabindex="0" onclick="openOperationModal('unfollowNonFollowers')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openOperationModal('unfollowNonFollowers')}">
           <div class="operation-header">

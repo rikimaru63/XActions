@@ -421,10 +421,29 @@
       const button = document.getElementById(id);
       button.addEventListener('click', () => {
         state[key] = !state[key];
-        button.classList.toggle('active', state[key]);
-        if (key === 'dm') els.dmField.style.display = state.dm ? 'block' : 'none';
-        if (key === 'like') els.likeCount.value = state.like ? Math.max(Number(els.likeCount.value) || 1, 1) : 0;
+        syncActionControls();
       });
+    }
+
+    function syncActionControls() {
+      document.getElementById('toggle-like').classList.toggle('active', state.like);
+      document.getElementById('toggle-follow').classList.toggle('active', state.follow);
+      document.getElementById('toggle-dm').classList.toggle('active', state.dm);
+      els.dmField.style.display = state.dm ? 'block' : 'none';
+      if (!state.like) els.likeCount.value = 0;
+      if (state.like && Number(els.likeCount.value) < 1) els.likeCount.value = 1;
+    }
+
+    function applyInitialMode() {
+      const params = new URLSearchParams(window.location.search);
+      const mode = params.get('mode');
+      if (mode === 'dm') {
+        state.like = false;
+        state.follow = false;
+        state.dm = true;
+        els.likeCount.value = 0;
+      }
+      syncActionControls();
     }
 
     document.getElementById('mode-dry').addEventListener('click', () => {
@@ -442,6 +461,7 @@
     bindToggle('toggle-like', 'like');
     bindToggle('toggle-follow', 'follow');
     bindToggle('toggle-dm', 'dm');
+    applyInitialMode();
 
     async function checkSession() {
       if (!requireLogin()) return;
