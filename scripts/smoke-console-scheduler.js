@@ -819,6 +819,139 @@ async function exerciseScheduleManagementApi(token, accountId) {
   };
 }
 
+async function exerciseRetryFailedAccounts(token, userId, accountIds) {
+  const batchId = randomUUID();
+  const retryText = `[${smokeId}] retry failed account dry run`;
+  const parent = await prisma.operation.create({
+    data: {
+      userId,
+      batchId,
+      type: 'postTweet',
+      status: 'failed',
+      config: JSON.stringify({
+        sourceFeatureId: 'postTweet',
+        isBatch: true,
+        mode: 'dryRun',
+        accountIds,
+        childCount: accountIds.length,
+        textLength: retryText.length,
+        hasRetryConfig: true,
+        encryptedRetryConfig: encrypt(JSON.stringify({ text: retryText })),
+      }),
+      error: '1件のアカウントで失敗しました。',
+    },
+  });
+  created.parentOperationIds.push(parent.id);
+
+  const completedChild = await prisma.operation.create({
+    data: {
+      userId,
+      accountId: accountIds[0],
+      parentOperationId: parent.id,
+      batchId,
+      type: 'postTweet',
+      status: 'completed',
+      config: JSON.stringify({
+        sourceFeatureId: 'postTweet',
+        textLength: retryText.length,
+        dryRun: true,
+      }),
+      result: JSON.stringify({ dryRun: true, skipped: true }),
+      completedAt: new Date(),
+    },
+  });
+  const failedChild = await prisma.operation.create({
+    data: {
+      userId,
+      accountId: accountIds[1],
+      parentOperationId: parent.id,
+      batchId,
+      type: 'postTweet',
+      status: 'failed',
+      config: JSON.stringify({
+        sourceFeatureId: 'postTweet',
+        textLength: retryText.length,
+        dryRun: true,
+      }),
+      error: 'Smoke seeded failed child operation.',
+      completedAt: new Date(),
+    },
+  });
+  created.operationIds.push(completedChild.id, failedChild.id);
+
+  const retryResponse = await requestJson('/api/console/actions/retry-failed', {
+    method: 'POST',
+    token,
+    body: {
+      parentOperationId: parent.id,
+    },
+  });
+
+  const retryOperationIds = (retryResponse.operations || []).map((operation) => operation.operationId);
+  assert(retryResponse.parentOperationId, 'Retry failed accounts did not create a retry parent operation.');
+  assert(retryResponse.retryOf === parent.id, 'Retry response did not point back to the original parent operation.');
+  assert(retryResponse.retriedAccountCount === 1, `Expected one retried account, got ${retryResponse.retriedAccountCount}.`);
+  assert(retryOperationIds.length === 1, `Expected one retry child operation, got ${retryOperationIds.length}.`);
+  assert(
+    retryResponse.operations[0]?.accountId === accountIds[1],
+    'Retry failed accounts did not target the failed account.'
+  );
+  assert(
+    !retryResponse.operations.some((operation) => operation.accountId === accountIds[0]),
+    'Retry failed accounts re-queued an already completed account.'
+  );
+  created.parentOperationIds.push(retryResponse.parentOperationId);
+  created.operationIds.push(...retryOperationIds);
+
+  const retryOperations = await pollOperations(retryOperationIds, 'retry failed account execution');
+  const retryParent = await waitFor('retry parent operation completion', async () => {
+    const operation = await prisma.operation.findUnique({
+      where: { id: retryResponse.parentOperationId },
+      select: { id: true, status: true, error: true, config: true },
+    });
+    return {
+      ok: operation?.status === 'completed',
+      operation,
+    };
+  }, { timeoutMs: 45000, intervalMs: 1000 });
+  const retryParentConfig = JSON.parse(retryParent.operation.config || '{}');
+  assert(retryParentConfig.retryOf === parent.id, 'Retry parent config did not retain retryOf.');
+  assert(retryParentConfig.childCount === 1, 'Retry parent should contain one child operation.');
+  assert(retryParentConfig.accountIds?.length === 1, 'Retry parent should contain one account id.');
+  assert(retryParentConfig.accountIds?.[0] === accountIds[1], 'Retry parent account ids did not match the failed account.');
+  assert(!retryParentConfig.text, 'Retry parent config leaked the retry post text.');
+  assert(retryParentConfig.encryptedRetryConfig, 'Retry parent did not store encrypted retry config.');
+  const retryBullJobData = await assertQueuedJobsDoNotContainSessionData(retryOperationIds);
+
+  const retryHistory = await requestJson(
+    `/api/console/history?featureId=postTweet&accountIds=${encodeURIComponent(accountIds[1])}&limit=20`,
+    { token }
+  );
+  const retryHistoryIds = new Set((retryHistory.operations || []).flatMap((operation) => [
+    operation.id,
+    ...(operation.childOperations || []).map((child) => child.id),
+  ]));
+  assert(retryHistoryIds.has(parent.id), 'Original failed parent was not visible in failed-account history.');
+  assert(retryHistoryIds.has(failedChild.id), 'Original failed child was not visible in failed-account history.');
+  assert(retryHistoryIds.has(retryResponse.parentOperationId), 'Retry parent was not visible in failed-account history.');
+  assert(retryOperationIds.every((operationId) => retryHistoryIds.has(operationId)), 'Retry child was not visible in failed-account history.');
+
+  return {
+    originalParentOperationId: parent.id,
+    completedAccountId: accountIds[0],
+    failedAccountId: accountIds[1],
+    retryParentOperationId: retryResponse.parentOperationId,
+    retryOperationIds,
+    retriedAccountCount: retryResponse.retriedAccountCount,
+    retryOperations: retryOperations.map((operation) => ({
+      id: operation.id,
+      accountId: operation.accountId,
+      status: operation.status,
+    })),
+    retryBullJobData,
+  };
+}
+
 function findSensitiveJobDataLeaks(value, path = 'job.data') {
   const leaks = [];
   if (value === null || typeof value === 'undefined') return leaks;
@@ -1029,6 +1162,7 @@ async function main() {
 
   const scheduledRuns = await pollScheduledRuns(created.runIds);
   const bullJobData = await assertQueuedJobsDoNotContainSessionData(created.operationIds);
+  const retryFailedAccounts = await exerciseRetryFailedAccounts(token, user.id, accountIds);
 
   for (const runNow of runNowResponses) {
     const runsResponse = await requestJson(`/api/scheduled-actions/${runNow.scheduleId}/runs?limit=5`, { token });
@@ -1091,6 +1225,7 @@ async function main() {
     automaticDue,
     staleLockRecovery,
     recurringDue,
+    retryFailedAccounts,
     scheduleManagement,
     schedules: schedules.map((schedule) => ({
       id: schedule.id,

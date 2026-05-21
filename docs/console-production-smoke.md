@@ -18,6 +18,8 @@ This smoke checks the production items from `docs/console-scheduler-multiaccount
 - automatic due schedule coverage proving the worker picks persisted once
   schedules from the database without using run-now
 - stale-lock recovery coverage proving old locked due schedules are picked up again
+- failed-account retry coverage proving only failed child operations are re-queued
+  and retry inputs stay encrypted
 - console UI navigation coverage proving all categories, settings, schedules, history, and live confirmation modal render
 - account UI state coverage proving multiple active accounts can be selected,
   history/schedule requests are filtered by selected accounts, and expired
