@@ -1,7 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'fs';
 import { features, getFeatureById, getPublicFeatureCatalog } from '../api/config/features.js';
-import { shouldSerializeAccountJob } from '../api/services/accountExecutionLock.js';
+import {
+  cooldownKey,
+  shouldSerializeAccountJob,
+  shouldThrottleAccountJob,
+  withAccountExecutionLock,
+} from '../api/services/accountExecutionLock.js';
 import {
   assertAccountSelectionLimit,
   explicitAccountIdsFromBody,
@@ -292,6 +297,33 @@ describe('console scheduler helpers', () => {
     expect(payload.jobConfig.message).toBe('hello');
   });
 
+  it('marks target engagement DM payloads without queuing empty DM text', () => {
+    const likeOnly = createActionPayload(
+      getFeatureById('targetEngage'),
+      { targetUsername: '@target_user', likeCount: 1, follow: false, dmMessage: '' },
+      'live'
+    );
+
+    expect(likeOnly.jobConfig).toMatchObject({
+      targetUsername: 'target_user',
+      hasDmMessage: false,
+    });
+    expect(likeOnly.jobConfig.dmMessage).toBeUndefined();
+
+    const withDm = createActionPayload(
+      getFeatureById('targetEngage'),
+      { targetUsername: '@target_user', likeCount: 0, follow: false, dmMessage: 'hello' },
+      'live'
+    );
+
+    expect(withDm.jobConfig).toMatchObject({
+      targetUsername: 'target_user',
+      hasDmMessage: true,
+      dmMessage: 'hello',
+    });
+    expect(withDm.operationConfig.dmMessage).toBeUndefined();
+  });
+
   it('exposes X account management inside the console catalog', () => {
     const catalog = getPublicFeatureCatalog();
     const accounts = catalog.features.find((item) => item.id === 'accounts');
@@ -361,6 +393,105 @@ describe('console scheduler helpers', () => {
     expect(shouldSerializeAccountJob({
       config: { dryRun: false },
     })).toBe(false);
+  });
+
+  it('throttles only live DM and follow account jobs', () => {
+    expect(shouldThrottleAccountJob({
+      type: 'sendDM',
+      accountId: 'acc_1',
+      config: { dryRun: false },
+    })).toBe(true);
+
+    expect(shouldThrottleAccountJob({
+      type: 'followEngagers',
+      accountId: 'acc_1',
+      config: { dryRun: false },
+    })).toBe(true);
+
+    expect(shouldThrottleAccountJob({
+      type: 'targetEngage',
+      accountId: 'acc_1',
+      config: { dryRun: false, follow: true },
+    })).toBe(true);
+
+    expect(shouldThrottleAccountJob({
+      type: 'targetEngage',
+      accountId: 'acc_1',
+      config: { dryRun: false, hasDmMessage: true },
+    })).toBe(true);
+
+    expect(shouldThrottleAccountJob({
+      type: 'targetEngage',
+      accountId: 'acc_1',
+      config: { dryRun: false, follow: false, hasDmMessage: false },
+    })).toBe(false);
+
+    expect(shouldThrottleAccountJob({
+      type: 'sendDM',
+      accountId: 'acc_1',
+      config: { dryRun: true },
+    })).toBe(false);
+  });
+
+  it('applies a Redis cooldown after high-risk live account jobs', async () => {
+    const redis = {
+      store: new Map(),
+      pttls: [2, -2],
+      pttlKeys: [],
+      cooldowns: [],
+      setCalls: [],
+      async set(key, value, ...args) {
+        this.setCalls.push({ key, value, args });
+        if (args.includes('NX') && this.store.has(key)) return null;
+        this.store.set(key, value);
+        return 'OK';
+      },
+      async pttl(key) {
+        this.pttlKeys.push(key);
+        return this.pttls.length ? this.pttls.shift() : -2;
+      },
+      async psetex(key, ttlMs, value) {
+        this.cooldowns.push({ key, ttlMs, value });
+        this.store.set(key, value);
+        return 'OK';
+      },
+      async eval(script, _keyCount, key, token) {
+        if (script.includes('del')) {
+          if (this.store.get(key) === token) {
+            this.store.delete(key);
+            return 1;
+          }
+          return 0;
+        }
+        return 1;
+      },
+    };
+    const progress = [];
+
+    const result = await withAccountExecutionLock(
+      redis,
+      {
+        id: 'job_1',
+        data: {
+          type: 'sendDM',
+          operationId: 'op_1',
+          accountId: 'acc_1',
+          config: { dryRun: false },
+        },
+        progress: async (message) => progress.push(message),
+      },
+      async () => 'ok',
+      { cooldownMs: 5, cooldownWaitMs: 50, waitMs: 1, ttlMs: 30000 }
+    );
+
+    expect(result).toBe('ok');
+    expect(progress.join(' ')).toContain('直列化');
+    expect(redis.pttlKeys).toEqual([cooldownKey('acc_1'), cooldownKey('acc_1')]);
+    expect(redis.cooldowns).toHaveLength(1);
+    expect(redis.cooldowns[0]).toMatchObject({
+      key: cooldownKey('acc_1'),
+      ttlMs: 5,
+    });
   });
 
   it('removes session material from queued job payloads', () => {

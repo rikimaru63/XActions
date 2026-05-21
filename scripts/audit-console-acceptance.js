@@ -45,6 +45,7 @@ function auditStaticAcceptance() {
   const consoleActions = read('api/services/consoleActions.js');
   const jobQueue = read('api/services/jobQueue.js');
   const queuePayload = read('api/services/queuePayload.js');
+  const accountExecutionLock = read('api/services/accountExecutionLock.js');
   const accountStore = read('api/services/accountStore.js');
   const accountSelection = read('api/services/accountSelection.js');
   const uiSmoke = read('scripts/smoke-console-ui.js');
@@ -116,6 +117,20 @@ function auditStaticAcceptance() {
     'operationAccountHistoryWhere',
     'data-account-choice',
     'accountIds: collectAccountIds',
+  ]);
+
+  const livePacingMissing = hasAll(accountExecutionLock + consoleActions, [
+    'shouldThrottleAccountJob',
+    'highRiskActionTypes',
+    "'sendDM'",
+    "'followEngagers'",
+    "'keywordFollow'",
+    'cooldownKey',
+    'waitForCooldown',
+    'setAccountCooldown',
+    'XACTIONS_ACCOUNT_HIGH_RISK_COOLDOWN_MS',
+    'hasDmMessage: !!dmMessage',
+    '...(dmMessage ? { dmMessage } : {})',
   ]);
 
   const legacySessionMissing = hasAll(accountStore + sessionAuthRoute + productionSmoke + JSON.stringify(pkg.scripts || {}), [
@@ -279,6 +294,13 @@ function auditStaticAcceptance() {
       accountSelectionMissing.length === 0,
       { maxAccounts: 2 },
       accountSelectionMissing
+    ),
+    item(
+      'live-action-pacing',
+      'DM and follow live actions are serialized and spaced per X account.',
+      livePacingMissing.length === 0,
+      { service: 'api/services/accountExecutionLock.js', cooldownMs: 60000 },
+      livePacingMissing
     ),
     item(
       'legacy-session-migration',
