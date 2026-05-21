@@ -43,7 +43,14 @@ import { exportConversation, getConversations } from '../../src/dmManager.js';
 import { bookmarkTweet, replyToTweet } from '../../src/engagementManager.js';
 import { deletePost } from '../../src/postComposer.js';
 import { getLiveSpaces, getScheduledSpaces, scrapeSpace } from '../../src/spacesManager.js';
-import { aggregateResults, analyzeBatch, analyzeSentiment, analyzeTweetPriceCorrelation } from '../../src/analytics/index.js';
+import {
+  aggregateResults,
+  analyzeBatch,
+  analyzeSentiment,
+  analyzeTweetPriceCorrelation,
+  getAccountHistory,
+  getGrowthRate,
+} from '../../src/analytics/index.js';
 import { DatasetStore, listDatasets } from '../../src/scraping/paginationEngine.js';
 import workflows from '../../src/workflows/index.js';
 import { Scheduler } from '../../src/agents/scheduler.js';
@@ -694,6 +701,168 @@ function tweetUrlFromConfig(config) {
   throw new Error('tweetId or tweetUrl is required');
 }
 
+function parseSocialCount(value) {
+  if (typeof value === 'number') return Number.isFinite(value) ? value : 0;
+  const text = String(value || '').replace(/,/g, '').trim();
+  if (!text) return 0;
+  const match = text.match(/([\d.]+)\s*([KMB万億])?/i);
+  if (!match) return 0;
+  const number = Number(match[1]);
+  if (!Number.isFinite(number)) return 0;
+  const suffix = (match[2] || '').toUpperCase();
+  const multiplier = {
+    K: 1000,
+    M: 1000000,
+    B: 1000000000,
+    '万': 10000,
+    '億': 100000000,
+  }[suffix] || 1;
+  return Math.round(number * multiplier);
+}
+
+function dayName(day) {
+  return ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][day] || 'Unknown';
+}
+
+function summarizeEngagement(username, profile, tweetsResult, options = {}) {
+  const items = (tweetsResult.items || tweetsResult || []).filter(Boolean);
+  const tweets = items.slice(0, options.limit || items.length).map((tweet) => {
+    const likes = parseSocialCount(tweet.likes);
+    const retweets = parseSocialCount(tweet.retweets);
+    const replies = parseSocialCount(tweet.replies);
+    const views = parseSocialCount(tweet.views);
+    const engagement = likes + retweets + replies;
+    return {
+      id: tweet.id,
+      url: tweet.url || (tweet.id ? `https://x.com/${username}/status/${tweet.id}` : null),
+      textPreview: String(tweet.text || '').slice(0, 140),
+      timestamp: tweet.timestamp || null,
+      likes,
+      retweets,
+      replies,
+      views,
+      engagement,
+      engagementRate: views > 0 ? Math.round((engagement / views) * 10000) / 100 : null,
+    };
+  });
+
+  const totals = tweets.reduce((acc, tweet) => ({
+    likes: acc.likes + tweet.likes,
+    retweets: acc.retweets + tweet.retweets,
+    replies: acc.replies + tweet.replies,
+    views: acc.views + tweet.views,
+    engagement: acc.engagement + tweet.engagement,
+  }), { likes: 0, retweets: 0, replies: 0, views: 0, engagement: 0 });
+
+  const followers = parseSocialCount(profile?.followers);
+  const count = tweets.length || 1;
+  const topTweets = [...tweets]
+    .sort((a, b) => b.engagement - a.engagement)
+    .slice(0, 5);
+
+  return {
+    username,
+    analyzedAt: new Date().toISOString(),
+    postsAnalyzed: tweets.length,
+    profile: profile ? {
+      name: profile.name || null,
+      username: profile.username || username,
+      followers,
+      following: parseSocialCount(profile.following),
+      verified: !!profile.verified,
+    } : null,
+    totals,
+    averages: {
+      likes: Math.round(totals.likes / count),
+      retweets: Math.round(totals.retweets / count),
+      replies: Math.round(totals.replies / count),
+      views: Math.round(totals.views / count),
+      engagement: Math.round(totals.engagement / count),
+      engagementRateByViews: totals.views > 0 ? Math.round((totals.engagement / totals.views) * 10000) / 100 : null,
+      engagementRateByFollowers: followers > 0 ? Math.round(((totals.engagement / count) / followers) * 10000) / 100 : null,
+    },
+    topTweets,
+  };
+}
+
+function summarizeBestPostTime(username, tweetsResult) {
+  const items = (tweetsResult.items || tweetsResult || []).filter((tweet) => tweet?.timestamp);
+  const hours = Array.from({ length: 24 }, (_, hour) => ({ hour, total: 0, count: 0, average: 0 }));
+  const days = Array.from({ length: 7 }, (_, day) => ({ day: dayName(day), total: 0, count: 0, average: 0 }));
+  const combos = new Map();
+
+  for (const tweet of items) {
+    const date = new Date(tweet.timestamp);
+    if (Number.isNaN(date.getTime())) continue;
+    const engagement = parseSocialCount(tweet.likes) + parseSocialCount(tweet.retweets) + parseSocialCount(tweet.replies);
+    const hour = date.getUTCHours();
+    const day = date.getUTCDay();
+    hours[hour].total += engagement;
+    hours[hour].count += 1;
+    days[day].total += engagement;
+    days[day].count += 1;
+    const key = `${day}:${hour}`;
+    const combo = combos.get(key) || { day: dayName(day), hour, total: 0, count: 0, average: 0 };
+    combo.total += engagement;
+    combo.count += 1;
+    combos.set(key, combo);
+  }
+
+  const withAverage = (item) => ({
+    ...item,
+    average: item.count ? Math.round((item.total / item.count) * 100) / 100 : 0,
+  });
+
+  const bestHours = hours.map(withAverage).filter((item) => item.count).sort((a, b) => b.average - a.average);
+  const bestDays = days.map(withAverage).filter((item) => item.count).sort((a, b) => b.average - a.average);
+  const bestCombos = [...combos.values()].map(withAverage).filter((item) => item.count).sort((a, b) => b.average - a.average);
+
+  return {
+    username,
+    analyzedAt: new Date().toISOString(),
+    postsAnalyzed: items.length,
+    bestHours: bestHours.slice(0, 8),
+    bestDays: bestDays.slice(0, 7),
+    bestCombos: bestCombos.slice(0, 10),
+    recommendation: {
+      day: bestDays[0]?.day || null,
+      hour: typeof bestHours[0]?.hour === 'number' ? bestHours[0].hour : null,
+    },
+  };
+}
+
+async function handleAudienceOverlap(config) {
+  const limit = config.limit || 500;
+  const [followersA, followersB] = await Promise.all([
+    scrapeFollowers(config.sessionCookie, config.username1, { limit }),
+    scrapeFollowers(config.sessionCookie, config.username2, { limit }),
+  ]);
+  const usersA = (followersA.users || []).map((user) => String(user.username || '').toLowerCase()).filter(Boolean);
+  const usersB = (followersB.users || []).map((user) => String(user.username || '').toLowerCase()).filter(Boolean);
+  const setA = new Set(usersA);
+  const setB = new Set(usersB);
+  const shared = usersA.filter((username) => setB.has(username));
+  const uniqueToA = usersA.filter((username) => !setB.has(username));
+  const uniqueToB = usersB.filter((username) => !setA.has(username));
+  const unionSize = new Set([...usersA, ...usersB]).size;
+
+  return {
+    accountA: { username: config.username1, followerCount: setA.size, uniqueCount: uniqueToA.length },
+    accountB: { username: config.username2, followerCount: setB.size, uniqueCount: uniqueToB.length },
+    shared: {
+      count: shared.length,
+      percentageOfUnion: unionSize ? Math.round((shared.length / unionSize) * 10000) / 100 : 0,
+      percentageOfA: setA.size ? Math.round((shared.length / setA.size) * 10000) / 100 : 0,
+      percentageOfB: setB.size ? Math.round((shared.length / setB.size) * 10000) / 100 : 0,
+      users: shared.slice(0, 100),
+    },
+    uniqueToA: { count: uniqueToA.length, users: uniqueToA.slice(0, 100) },
+    uniqueToB: { count: uniqueToB.length, users: uniqueToB.slice(0, 100) },
+    analyzedAt: new Date().toISOString(),
+    limit,
+  };
+}
+
 const getJobStatus = getJob;
 const isWorkerProcess = process.env.XACTIONS_WORKER === 'true'
   || (process.argv[1] || '').replace(/\\/g, '/').endsWith('api/services/jobQueue.js');
@@ -1076,6 +1245,73 @@ operationsQueue.process('analyzeSentiment', 2, async (job) => {
 
   const config = job.data.config || {};
   return analyzeSentiment(config.text, { mode: config.mode || 'rules' });
+});
+
+operationsQueue.process('analyzeEngagement', 1, async (job) => {
+  console.log(`🔄 Processing job ${job.id}: analyzeEngagement`);
+
+  const config = await resolveJobConfig(job);
+  const [profile, tweets] = await Promise.all([
+    scrapeProfile(config.sessionCookie, config.username),
+    scrapeTweets(config.sessionCookie, config.username, {
+      limit: config.tweetCount || 50,
+      includeReplies: config.includeReplies,
+    }),
+  ]);
+  return summarizeEngagement(config.username, profile, tweets, { limit: config.tweetCount || 50 });
+});
+
+operationsQueue.process('growthHistory', 1, async (job) => {
+  console.log(`🔄 Processing job ${job.id}: growthHistory`);
+
+  const config = job.data.config || {};
+  const days = config.days || 30;
+  const from = new Date(Date.now() - days * 86400000).toISOString();
+  return {
+    username: config.username,
+    days,
+    interval: config.interval || 'day',
+    growth: getGrowthRate(config.username, days),
+    snapshots: getAccountHistory(config.username, { from, interval: config.interval || 'day' }),
+  };
+});
+
+operationsQueue.process('audienceOverlap', 1, async (job) => {
+  console.log(`🔄 Processing job ${job.id}: audienceOverlap`);
+
+  const config = await resolveJobConfig(job);
+  return handleAudienceOverlap(config);
+});
+
+operationsQueue.process('bestPostTime', 1, async (job) => {
+  console.log(`🔄 Processing job ${job.id}: bestPostTime`);
+
+  const config = await resolveJobConfig(job);
+  const tweets = await scrapeTweets(config.sessionCookie, config.username, {
+    limit: config.tweetCount || 80,
+    includeReplies: config.includeReplies,
+  });
+  return summarizeBestPostTime(config.username, tweets);
+});
+
+operationsQueue.process('analyticsReport', 1, async (job) => {
+  console.log(`🔄 Processing job ${job.id}: analyticsReport`);
+
+  const config = await resolveJobConfig(job);
+  const [profile, tweets] = await Promise.all([
+    scrapeProfile(config.sessionCookie, config.username),
+    scrapeTweets(config.sessionCookie, config.username, {
+      limit: config.tweetCount || 80,
+      includeReplies: false,
+    }),
+  ]);
+  return {
+    username: config.username,
+    generatedAt: new Date().toISOString(),
+    engagement: summarizeEngagement(config.username, profile, tweets, { limit: config.tweetCount || 80 }),
+    bestPostTime: summarizeBestPostTime(config.username, tweets),
+    growth: getGrowthRate(config.username, config.days || 30),
+  };
 });
 
 operationsQueue.process('priceCorrelation', 1, async (job) => {

@@ -146,6 +146,29 @@ const sampleConfigByFeature = {
     text: 'secret-analysis-text',
     mode: 'rules',
   },
+  engagementAnalysis: {
+    username: 'target_user',
+    tweetCount: 10,
+  },
+  growthHistory: {
+    username: 'target_user',
+    days: 30,
+    interval: 'day',
+  },
+  audienceOverlap: {
+    username1: 'target_user',
+    username2: 'source_account',
+    limit: 10,
+  },
+  bestPostTime: {
+    username: 'target_user',
+    tweetCount: 10,
+  },
+  analyticsReport: {
+    username: 'target_user',
+    tweetCount: 10,
+    days: 30,
+  },
   priceCorrelation: {
     tweets: JSON.stringify([{ timestamp: 1710000000000, text: 'secret-market-tweet' }]),
     tokenId: 'bitcoin',

@@ -585,6 +585,110 @@ describe('console scheduler helpers', () => {
     });
   });
 
+  it('connects analytics features to the unified console', () => {
+    for (const [id, action] of [
+      ['engagementAnalysis', 'analyzeEngagement'],
+      ['growthHistory', 'growthHistory'],
+      ['audienceOverlap', 'audienceOverlap'],
+      ['bestPostTime', 'bestPostTime'],
+      ['analyticsReport', 'analyticsReport'],
+    ]) {
+      expect(getFeatureById(id)).toMatchObject({
+        status: 'available',
+        consoleAction: action,
+        supportsDryRun: true,
+        supportsSchedule: true,
+      });
+    }
+  });
+
+  it('builds payloads for analytics features', () => {
+    const engagement = createActionPayload(
+      getFeatureById('engagementAnalysis'),
+      { username: '@target_user', tweetCount: 30, includeReplies: true },
+      'dryRun'
+    );
+    expect(engagement).toMatchObject({
+      operationType: 'analyzeEngagement',
+      operationConfig: {
+        sourceFeatureId: 'engagementAnalysis',
+        username: 'target_user',
+        tweetCount: 30,
+        includeReplies: true,
+        dryRun: true,
+      },
+      jobConfig: {
+        username: 'target_user',
+        tweetCount: 30,
+        includeReplies: true,
+        dryRun: true,
+      },
+    });
+
+    const growth = createActionPayload(
+      getFeatureById('growthHistory'),
+      { username: '@target_user', days: 90, interval: 'week' },
+      'dryRun'
+    );
+    expect(growth).toMatchObject({
+      operationType: 'growthHistory',
+      operationConfig: {
+        sourceFeatureId: 'growthHistory',
+        username: 'target_user',
+        days: 90,
+        interval: 'week',
+        dryRun: true,
+      },
+    });
+
+    const overlap = createActionPayload(
+      getFeatureById('audienceOverlap'),
+      { username1: '@target_user', username2: '@source_user', limit: 250 },
+      'live'
+    );
+    expect(overlap).toMatchObject({
+      operationType: 'audienceOverlap',
+      operationConfig: {
+        sourceFeatureId: 'audienceOverlap',
+        username1: 'target_user',
+        username2: 'source_user',
+        limit: 250,
+        dryRun: true,
+      },
+    });
+
+    const bestTime = createActionPayload(
+      getFeatureById('bestPostTime'),
+      { username: '@target_user', tweetCount: 60 },
+      'dryRun'
+    );
+    expect(bestTime).toMatchObject({
+      operationType: 'bestPostTime',
+      operationConfig: {
+        sourceFeatureId: 'bestPostTime',
+        username: 'target_user',
+        tweetCount: 60,
+        dryRun: true,
+      },
+    });
+
+    const report = createActionPayload(
+      getFeatureById('analyticsReport'),
+      { username: '@target_user', tweetCount: 60, days: 14 },
+      'dryRun'
+    );
+    expect(report).toMatchObject({
+      operationType: 'analyticsReport',
+      operationConfig: {
+        sourceFeatureId: 'analyticsReport',
+        username: 'target_user',
+        tweetCount: 60,
+        days: 14,
+        dryRun: true,
+      },
+    });
+  });
+
   it('connects monitor and workflow automation actions to the console catalog', () => {
     expect(getFeatureById('monitor')).toMatchObject({
       status: 'available',

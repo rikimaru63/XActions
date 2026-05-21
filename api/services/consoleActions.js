@@ -622,6 +622,128 @@ function createActionPayload(feature, inputConfig, mode = 'dryRun', user = {}) {
       };
     }
 
+    case 'analyzeEngagement': {
+      const username = normalizeUsername(config.username || user.twitterUsername);
+      const tweetCount = asNumber(config.tweetCount || config.limit, 50, 10, 200);
+      const includeReplies = asBool(config.includeReplies);
+      if (!username) throw new Error('対象ユーザーを入力してください。');
+
+      return {
+        operationType: 'analyzeEngagement',
+        operationConfig: {
+          sourceFeatureId: feature.id,
+          username,
+          tweetCount,
+          includeReplies,
+          dryRun: true,
+        },
+        jobConfig: {
+          username,
+          tweetCount,
+          includeReplies,
+          dryRun: true,
+        },
+      };
+    }
+
+    case 'growthHistory': {
+      const username = normalizeUsername(config.username || user.twitterUsername);
+      const days = asNumber(config.days, 30, 1, 365);
+      const requestedInterval = String(config.interval || 'day').trim().toLowerCase();
+      const interval = ['raw', 'day', 'week', 'month'].includes(requestedInterval) ? requestedInterval : 'day';
+      if (!username) throw new Error('対象ユーザーを入力してください。');
+
+      return {
+        operationType: 'growthHistory',
+        operationConfig: {
+          sourceFeatureId: feature.id,
+          username,
+          days,
+          interval,
+          dryRun: true,
+        },
+        jobConfig: {
+          username,
+          days,
+          interval,
+          dryRun: true,
+        },
+      };
+    }
+
+    case 'audienceOverlap': {
+      const username1 = normalizeUsername(config.username1 || config.accountA);
+      const username2 = normalizeUsername(config.username2 || config.accountB);
+      const limit = asNumber(config.limit, 500, 10, 5000);
+      if (!username1 || !username2) throw new Error('比較する2つのユーザーを入力してください。');
+      if (username1 === username2) throw new Error('別々のユーザーを指定してください。');
+
+      return {
+        operationType: 'audienceOverlap',
+        operationConfig: {
+          sourceFeatureId: feature.id,
+          username1,
+          username2,
+          limit,
+          dryRun: true,
+        },
+        jobConfig: {
+          username1,
+          username2,
+          limit,
+          dryRun: true,
+        },
+      };
+    }
+
+    case 'bestPostTime': {
+      const username = normalizeUsername(config.username || user.twitterUsername);
+      const tweetCount = asNumber(config.tweetCount || config.limit, 80, 10, 200);
+      const includeReplies = asBool(config.includeReplies);
+      if (!username) throw new Error('対象ユーザーを入力してください。');
+
+      return {
+        operationType: 'bestPostTime',
+        operationConfig: {
+          sourceFeatureId: feature.id,
+          username,
+          tweetCount,
+          includeReplies,
+          dryRun: true,
+        },
+        jobConfig: {
+          username,
+          tweetCount,
+          includeReplies,
+          dryRun: true,
+        },
+      };
+    }
+
+    case 'analyticsReport': {
+      const username = normalizeUsername(config.username || user.twitterUsername);
+      const tweetCount = asNumber(config.tweetCount || config.limit, 80, 10, 200);
+      const days = asNumber(config.days, 30, 1, 365);
+      if (!username) throw new Error('対象ユーザーを入力してください。');
+
+      return {
+        operationType: 'analyticsReport',
+        operationConfig: {
+          sourceFeatureId: feature.id,
+          username,
+          tweetCount,
+          days,
+          dryRun: true,
+        },
+        jobConfig: {
+          username,
+          tweetCount,
+          days,
+          dryRun: true,
+        },
+      };
+    }
+
     case 'priceCorrelation': {
       const tweets = parseJson(config.tweets);
       const tokenId = String(config.tokenId || '').trim();
