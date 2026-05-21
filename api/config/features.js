@@ -660,7 +660,7 @@ const features = [
     authRequired: true,
     accountRequired: true,
     supportsDryRun: true,
-    supportsSchedule: false,
+    supportsSchedule: true,
     riskLevel: 'medium',
     status: 'available',
     endpoint: '/api/portability/export',

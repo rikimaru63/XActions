@@ -97,9 +97,11 @@ describe('console scheduler helpers', () => {
     const catalog = getPublicFeatureCatalog();
     const unavailable = catalog.features.filter((item) => item.status !== 'available');
     const missingAction = catalog.features.filter((item) => item.id !== 'accounts' && !item.consoleAction);
+    const missingSchedule = catalog.features.filter((item) => item.id !== 'accounts' && item.consoleAction && !item.supportsSchedule);
 
     expect(unavailable).toEqual([]);
     expect(missingAction).toEqual([]);
+    expect(missingSchedule).toEqual([]);
     expect(catalog.categories.every((category) => category.available === category.total)).toBe(true);
   });
 
@@ -522,7 +524,7 @@ describe('console scheduler helpers', () => {
       consoleAction: 'portability',
       operationType: 'portability',
       accountRequired: true,
-      supportsSchedule: false,
+      supportsSchedule: true,
     });
   });
 
