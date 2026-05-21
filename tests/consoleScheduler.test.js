@@ -170,12 +170,21 @@ describe('console scheduler helpers', () => {
     expect(explicitAccountIdsFromBody({ accountIds: ['acc_1', 'acc_1', ' acc_2 '] })).toEqual(['acc_1', 'acc_2']);
     expect(explicitAccountIdsFromBody({})).toEqual([]);
     expect(explicitAccountIdsFromQuery({ accountId: 'acc_1' })).toEqual(['acc_1']);
+    expect(explicitAccountIdsFromQuery({ accountIds: 'acc_1', accountId: 'acc_2' })).toEqual(['acc_1', 'acc_2']);
     expect(explicitAccountIdsFromQuery({ accountIds: 'acc_1, acc_2', accountId: 'acc_2' })).toEqual(['acc_1', 'acc_2']);
     expect(explicitAccountIdsFromQuery({})).toEqual([]);
     expect(() => assertAccountSelectionLimit(['acc_1', 'acc_2'])).not.toThrow();
     expect(() => assertAccountSelectionLimit(['acc_1', 'acc_2', 'acc_3'])).toThrow(
       `一度に選べるXアカウントは${MAX_ACCOUNT_SELECTION}件までです。`
     );
+  });
+
+  it('uses one account query parser for history and schedule filters', () => {
+    const consoleRoute = readFileSync(new URL('../api/routes/console.js', import.meta.url), 'utf8');
+    const scheduleRoute = readFileSync(new URL('../api/routes/scheduled-actions.js', import.meta.url), 'utf8');
+
+    expect(consoleRoute).toContain('explicitAccountIdsFromQuery(req.query)');
+    expect(scheduleRoute).toContain('explicitAccountIdsFromQuery(req.query)');
   });
 
   it('keeps batch parent operations visible when filtering history by account', () => {

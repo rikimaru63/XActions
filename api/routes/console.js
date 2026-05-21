@@ -17,6 +17,7 @@ import { listAccountsForUser } from '../services/accountStore.js';
 import {
   assertAccountSelectionLimit,
   explicitAccountIdsFromBody,
+  explicitAccountIdsFromQuery,
   operationAccountHistoryWhere,
 } from '../services/accountSelection.js';
 import {
@@ -206,10 +207,7 @@ router.get('/history', async (req, res) => {
 
     if (status) where.status = String(status);
 
-    const requestedAccountIds = String(req.query.accountIds || req.query.accountId || '')
-      .split(',')
-      .map((item) => item.trim())
-      .filter(Boolean);
+    const requestedAccountIds = explicitAccountIdsFromQuery(req.query);
 
     if (requestedAccountIds.length) {
       const accounts = await prisma.xAccount.findMany({
