@@ -17,6 +17,7 @@ This smoke checks the production items from `docs/console-scheduler-multiaccount
 - schedule management coverage for pause, update, resume, delete, and deleted lookup handling
 - automatic due schedule coverage proving the worker picks persisted once
   schedules from the database without using run-now
+- stale-lock recovery coverage proving old locked due schedules are picked up again
 - headless Puppeteer / browserAutomation launch
 - worker container running
 - scheduler startup log

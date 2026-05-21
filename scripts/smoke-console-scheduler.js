@@ -563,6 +563,91 @@ async function exerciseAutomaticDueScheduler(token, accountIds) {
   };
 }
 
+async function exerciseStaleLockRecovery(token, accountId) {
+  const futureRunAt = new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString();
+  const createResponse = await requestJson('/api/console/actions/schedule', {
+    method: 'POST',
+    token,
+    body: {
+      featureId: 'postTweet',
+      mode: 'dryRun',
+      name: `Console stale lock smoke ${smokeId}`,
+      accountIds: [accountId],
+      maxRetries: 0,
+      config: {
+        text: `[${smokeId}] stale lock scheduler dry run`,
+      },
+      schedule: {
+        type: 'once',
+        runAt: futureRunAt,
+        timezone: 'Asia/Tokyo',
+      },
+    },
+  });
+
+  const schedule = createResponse.schedules?.[0];
+  assert(schedule?.id, 'Stale lock smoke did not create a schedule.');
+  assert(schedule.accountId === accountId, 'Stale lock smoke created the schedule for the wrong account.');
+  pushUnique(created.scheduleIds, [schedule.id]);
+
+  const dueAt = new Date(Date.now() - 60 * 1000);
+  const staleLockedAt = new Date(Date.now() - 15 * 60 * 1000);
+  const staleLockedBy = `smoke-stale-lock-${smokeId}`;
+  await prisma.scheduledAction.update({
+    where: { id: schedule.id },
+    data: {
+      nextRunAt: dueAt,
+      lockedAt: staleLockedAt,
+      lockedBy: staleLockedBy,
+    },
+  });
+
+  const result = await waitFor('stale locked due scheduler completion', async () => {
+    const row = await prisma.scheduledAction.findUnique({
+      where: { id: schedule.id },
+      include: {
+        runs: {
+          include: {
+            operation: {
+              select: {
+                id: true,
+                accountId: true,
+                status: true,
+                error: true,
+              },
+            },
+          },
+          orderBy: { createdAt: 'asc' },
+        },
+      },
+    });
+
+    const run = row?.runs?.[0] || null;
+    const terminal = row?.status === 'completed'
+      && row?.nextRunAt === null
+      && row?.lockedAt === null
+      && row?.lockedBy === null
+      && run?.status === 'completed'
+      && run?.operation?.status === 'completed';
+
+    return { ok: terminal, schedule: row, run };
+  }, { timeoutMs: 90000, intervalMs: 1500 });
+
+  if (result.run?.id) pushUnique(created.runIds, [result.run.id]);
+  if (result.run?.operationId) pushUnique(created.operationIds, [result.run.operationId]);
+
+  return {
+    scheduleId: schedule.id,
+    accountId,
+    staleLockedBy,
+    recoveredStatus: result.schedule.status,
+    lockCleared: result.schedule.lockedAt === null && result.schedule.lockedBy === null,
+    runId: result.run.id,
+    operationId: result.run.operationId,
+    operationStatus: result.run.operation?.status,
+  };
+}
+
 async function exerciseScheduleManagementApi(token, accountId) {
   const initialRunAt = new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString();
   const createResponse = await requestJson('/api/console/actions/schedule', {
@@ -794,6 +879,7 @@ async function main() {
   }, { timeoutMs: 45000, intervalMs: 1000 });
 
   const automaticDue = await exerciseAutomaticDueScheduler(token, accountIds);
+  const staleLockRecovery = await exerciseStaleLockRecovery(token, accountIds[0]);
 
   const runAt = new Date(Date.now() + 60 * 60 * 1000).toISOString();
   const scheduleResponse = await requestJson('/api/console/actions/schedule', {
@@ -879,6 +965,10 @@ async function main() {
     automaticDue.operationIds.every((operationId) => historyIds.has(operationId)),
     'Automatic due scheduler operations were not visible in filtered history.'
   );
+  assert(
+    historyIds.has(staleLockRecovery.operationId),
+    'Stale lock recovery operation was not visible in filtered history.'
+  );
   const accountDeletes = await exerciseAccountDeleteApi(token, accounts);
   const deletedAccountSchedules = await assertDeletedAccountSchedulesPaused(manualScheduleIds);
 
@@ -903,6 +993,7 @@ async function main() {
       })),
     },
     automaticDue,
+    staleLockRecovery,
     scheduleManagement,
     schedules: schedules.map((schedule) => ({
       id: schedule.id,
