@@ -20,6 +20,8 @@ This smoke checks the production items from `docs/console-scheduler-multiaccount
 - stale-lock recovery coverage proving old locked due schedules are picked up again
 - failed-account retry coverage proving only failed child operations are re-queued
   and retry inputs stay encrypted
+- optional worker restart recovery smoke proving an unexecuted DB schedule is
+  picked up after the worker container starts again
 - console UI navigation coverage proving all categories, settings, schedules, history, and live confirmation modal render
 - account UI state coverage proving multiple active accounts can be selected,
   history/schedule requests are filtered by selected accounts, and expired
@@ -57,6 +59,18 @@ Scheduler smoke mode:
   and is available for explicit CI configuration.
 - `XACTIONS_PRODUCTION_SCHEDULER_SMOKE=never` skips the scheduler smoke when
   you only want the lighter endpoint/UI checks.
+
+Worker restart smoke:
+
+This intentionally stops only the XActions worker container, creates a due
+dry-run schedule while the worker is stopped, starts the same worker container,
+and verifies the schedule is completed from the database.
+
+```bash
+api="$(docker ps --format '{{.Names}}' | grep '^api-sg008w80csw08skkwcwswwgw' | head -n 1)"
+docker cp "$api":/app/scripts/smoke-console-worker-restart-host.sh /tmp/xactions-worker-restart-smoke.sh
+bash /tmp/xactions-worker-restart-smoke.sh
+```
 
 Live readonly mode:
 
