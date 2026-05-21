@@ -76,10 +76,17 @@ async function cleanupSmokeAccounts(userId) {
 async function createUiAccounts(userId) {
   const rows = [
     {
-      username: `${accountPrefix}active_${smokeId}`,
-      displayName: 'Smoke UI Active',
+      username: `${accountPrefix}active_a_${smokeId}`,
+      displayName: 'Smoke UI Active A',
       status: 'active',
       isDefault: true,
+      error: null,
+    },
+    {
+      username: `${accountPrefix}active_b_${smokeId}`,
+      displayName: 'Smoke UI Active B',
+      status: 'active',
+      isDefault: false,
       error: null,
     },
     {
@@ -118,6 +125,16 @@ function isIgnorableBadResponse(item) {
   return item.includes('/favicon.ico');
 }
 
+function isMockedUiListRequest(request) {
+  if (request.method() !== 'GET') return false;
+  const url = new URL(request.url());
+  return url.pathname === '/api/console/history' || url.pathname === '/api/scheduled-actions';
+}
+
+function accountIdSet(ids) {
+  return [...new Set(ids.filter(Boolean))].sort();
+}
+
 const user = await resolveSmokeUser();
 await cleanupSmokeAccounts(user.id);
 const accounts = await createUiAccounts(user.id);
@@ -134,6 +151,7 @@ try {
   const consoleErrors = [];
   const badResponses = [];
   const failedRequests = [];
+  const filterRequests = [];
 
   page.on('pageerror', (error) => pageErrors.push(error.message));
   page.on('console', (message) => {
@@ -144,6 +162,24 @@ try {
   });
   page.on('requestfailed', (request) => {
     failedRequests.push(`${request.method()} ${request.url()} ${request.failure()?.errorText || ''}`.trim());
+  });
+  await page.setRequestInterception(true);
+  page.on('request', (request) => {
+    if (isMockedUiListRequest(request)) {
+      const url = new URL(request.url());
+      filterRequests.push({
+        path: url.pathname,
+        featureId: url.searchParams.get('featureId') || '',
+        accountIds: accountIdSet((url.searchParams.get('accountIds') || '').split(',')),
+      });
+      request.respond({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify(url.pathname === '/api/console/history' ? { operations: [] } : { schedules: [] }),
+      });
+      return;
+    }
+    request.continue();
   });
 
   await page.goto(`${baseUrl}/login`, { waitUntil: 'domcontentloaded', timeout: 60000 });
@@ -165,6 +201,30 @@ try {
     }),
   }));
 
+  const activeAccounts = accounts.filter((account) => account.status === 'active');
+  const defaultAccount = activeAccounts.find((account) => account.isDefault);
+  const secondaryAccount = activeAccounts.find((account) => !account.isDefault);
+  const selectedAccountIds = accountIdSet(activeAccounts.map((account) => account.id));
+
+  await page.click(`#account-list [data-account-sidebar-choice][value="${secondaryAccount.id}"]`);
+  await page.waitForFunction(
+    (id) => document.querySelector(`#account-list [data-account-sidebar-choice][value="${id}"]`)?.checked,
+    {},
+    secondaryAccount.id
+  );
+  await page.click('.tabs [data-tab="schedule"]');
+  await page.waitForFunction(() => document.querySelector('.tabs [data-tab="schedule"]')?.classList.contains('active'));
+  await page.click('.tabs [data-tab="history"]');
+  await page.waitForFunction(() => document.querySelector('.tabs [data-tab="history"]')?.classList.contains('active'));
+  await page.waitForFunction(
+    (ids) => {
+      const selected = [...document.querySelectorAll('#account-list [data-account-sidebar-choice]:checked')].map((item) => item.value).sort();
+      return selected.join(',') === ids.join(',');
+    },
+    {},
+    selectedAccountIds
+  );
+
   await page.click('#category-nav [data-category="settings"]');
   await page.waitForFunction(() => document.querySelector('#category-nav [data-category="settings"]')?.classList.contains('active'));
   await page.click('#feature-list [data-feature="accounts"]');
@@ -179,28 +239,45 @@ try {
     })),
   }));
 
-  const activeAccount = accounts.find((account) => account.status === 'active');
   const expiredAccount = accounts.find((account) => account.status === 'expired');
-  const activeSidebar = sidebar.items.find((item) => item.accountId === activeAccount.id);
+  const defaultSidebar = sidebar.items.find((item) => item.accountId === defaultAccount.id);
+  const secondarySidebar = sidebar.items.find((item) => item.accountId === secondaryAccount.id);
   const expiredSidebar = sidebar.items.find((item) => item.accountId === expiredAccount.id);
-  const activeCard = management.cards.find((card) => card.accountId === activeAccount.id);
+  const activeCards = activeAccounts.map((account) => management.cards.find((card) => card.accountId === account.id));
   const expiredCard = management.cards.find((card) => card.accountId === expiredAccount.id);
+  const filterChecks = {
+    historyByAccounts: filterRequests.some((request) => (
+      request.path === '/api/console/history'
+      && request.featureId === 'targetEngage'
+      && request.accountIds.join(',') === selectedAccountIds.join(',')
+    )),
+    schedulesByAccounts: filterRequests.some((request) => (
+      request.path === '/api/scheduled-actions'
+      && request.featureId === 'targetEngage'
+      && request.accountIds.join(',') === selectedAccountIds.join(',')
+    )),
+  };
   const blockingBadResponses = badResponses.filter((item) => !isIgnorableBadResponse(item));
   const blockingConsoleErrors = consoleErrors.filter((item) => !item.includes('Failed to load resource'));
 
-  const ok = sidebar.accountName === `@${activeAccount.username}`
-    && sidebar.accountState === '2件 / 1件が実行可能'
-    && activeSidebar
-    && !activeSidebar.disabled
-    && activeSidebar.text.includes('デフォルト')
+  const ok = sidebar.accountName === `@${defaultAccount.username}`
+    && sidebar.accountState === '3件 / 2件が実行可能'
+    && defaultSidebar
+    && !defaultSidebar.disabled
+    && defaultSidebar.text.includes('デフォルト')
+    && secondarySidebar
+    && !secondarySidebar.disabled
+    && secondarySidebar.text.includes(`@${secondaryAccount.username}`)
     && expiredSidebar
     && expiredSidebar.disabled
     && expiredSidebar.disabledByStatus
     && expiredSidebar.text.includes('期限切れ')
     && management.detailTitle === 'X連携'
-    && activeCard?.badge === '連携済み'
+    && activeCards.every((card) => card?.badge === '連携済み')
     && expiredCard?.badge === '期限切れ'
     && expiredCard?.text.includes('Smoke UI expired session')
+    && filterChecks.historyByAccounts
+    && filterChecks.schedulesByAccounts
     && pageErrors.length === 0
     && blockingConsoleErrors.length === 0
     && blockingBadResponses.length === 0
@@ -213,6 +290,8 @@ try {
     accounts,
     sidebar,
     management,
+    filterChecks,
+    filterRequests,
     pageErrors,
     consoleErrors,
     badResponses,
