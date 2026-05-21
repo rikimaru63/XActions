@@ -49,6 +49,50 @@ case "$LIVE_READONLY_MODE" in
     ;;
 esac
 
+LIVE_ACCOUNT_SELECTOR_ENV_VARS=(
+  XACTIONS_LIVE_ACCOUNT_IDS
+  XACTIONS_LIVE_ACCOUNT_A_ID
+  XACTIONS_LIVE_ACCOUNT_B_ID
+  XACTIONS_LIVE_ACCOUNT_USERNAMES
+  XACTIONS_LIVE_ACCOUNT_A_USERNAME
+  XACTIONS_LIVE_ACCOUNT_B_USERNAME
+)
+LIVE_ACCOUNT_ACCEPTANCE_ENV_VARS=(
+  XACTIONS_LIVE_ACCOUNT_A_COOKIE
+  XACTIONS_LIVE_ACCOUNT_B_COOKIE
+  "${LIVE_ACCOUNT_SELECTOR_ENV_VARS[@]}"
+  XACTIONS_LIVE_USE_EXISTING_ACCOUNTS
+)
+
+env_true() {
+  case "${1,,}" in
+    1|true|yes|on) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+append_host_env_if_present() {
+  local target_array_name="$1"
+  shift
+  local -n target_array="$target_array_name"
+  local var_name
+  for var_name in "$@"; do
+    if [[ -n "${!var_name:-}" ]]; then
+      target_array+=(-e "${var_name}=${!var_name}")
+    fi
+  done
+}
+
+host_has_existing_account_selector() {
+  local var_name
+  for var_name in "${LIVE_ACCOUNT_SELECTOR_ENV_VARS[@]}"; do
+    if [[ -n "${!var_name:-}" ]]; then
+      return 0
+    fi
+  done
+  env_true "${XACTIONS_LIVE_USE_EXISTING_ACCOUNTS:-}"
+}
+
 if [[ -z "$API_CONTAINER" ]]; then
   API_CONTAINER="$(find_container api)"
 fi
@@ -195,9 +239,13 @@ NODE
 docker exec "$API_CONTAINER" npm run audit:console-catalog
 echo "ok console catalog audit"
 
-docker exec \
-  -e XACTIONS_SMOKE_USERNAME="$SMOKE_USERNAME" \
-  "$API_CONTAINER" npm run audit:console-acceptance
+acceptance_args=(-e "XACTIONS_SMOKE_USERNAME=${SMOKE_USERNAME}")
+if [[ "$LIVE_READONLY_MODE" == "always" ]]; then
+  acceptance_args+=(-e XACTIONS_ACCEPTANCE_REQUIRE_LIVE=true)
+fi
+append_host_env_if_present acceptance_args "${LIVE_ACCOUNT_ACCEPTANCE_ENV_VARS[@]}"
+
+docker exec "${acceptance_args[@]}" "$API_CONTAINER" npm run audit:console-acceptance
 echo "ok console acceptance audit"
 
 docker exec "$API_CONTAINER" npm run verify:headless
@@ -269,6 +317,20 @@ container_has_live_cookies() {
   docker exec "$API_CONTAINER" sh -lc '[ -n "$XACTIONS_LIVE_ACCOUNT_A_COOKIE" ] && [ -n "$XACTIONS_LIVE_ACCOUNT_B_COOKIE" ]'
 }
 
+container_has_existing_account_selector() {
+  docker exec "$API_CONTAINER" sh -lc '
+case "$(printf "%s" "${XACTIONS_LIVE_USE_EXISTING_ACCOUNTS:-}" | tr "[:upper:]" "[:lower:]")" in
+  1|true|yes|on) exit 0 ;;
+esac
+[ -n "${XACTIONS_LIVE_ACCOUNT_IDS:-}" ] \
+  || [ -n "${XACTIONS_LIVE_ACCOUNT_A_ID:-}" ] \
+  || [ -n "${XACTIONS_LIVE_ACCOUNT_B_ID:-}" ] \
+  || [ -n "${XACTIONS_LIVE_ACCOUNT_USERNAMES:-}" ] \
+  || [ -n "${XACTIONS_LIVE_ACCOUNT_A_USERNAME:-}" ] \
+  || [ -n "${XACTIONS_LIVE_ACCOUNT_B_USERNAME:-}" ]
+'
+}
+
 active_xaccount_count() {
   docker exec -i \
     -e XACTIONS_SMOKE_USERNAME="$SMOKE_USERNAME" \
@@ -313,8 +375,14 @@ run_live_readonly_with_existing_accounts() {
   local args=(
     -e "XACTIONS_BASE_URL=${BASE_URL}"
     -e "XACTIONS_SMOKE_USERNAME=${SMOKE_USERNAME}"
-    -e XACTIONS_LIVE_USE_EXISTING_ACCOUNTS=true
   )
+  append_host_env_if_present args "${LIVE_ACCOUNT_SELECTOR_ENV_VARS[@]}"
+  if env_true "${XACTIONS_LIVE_USE_EXISTING_ACCOUNTS:-}"; then
+    args+=(-e "XACTIONS_LIVE_USE_EXISTING_ACCOUNTS=${XACTIONS_LIVE_USE_EXISTING_ACCOUNTS}")
+  fi
+  if ! host_has_existing_account_selector && ! container_has_existing_account_selector; then
+    args+=(-e XACTIONS_LIVE_USE_EXISTING_ACCOUNTS=true)
+  fi
   if [[ -n "${XACTIONS_LIVE_PROFILE_TARGET:-}" ]]; then
     args+=(-e "XACTIONS_LIVE_PROFILE_TARGET=${XACTIONS_LIVE_PROFILE_TARGET}")
   fi
@@ -334,6 +402,12 @@ maybe_run_live_readonly() {
   if host_has_live_cookies; then
     echo "run live readonly smoke: host cookies"
     run_live_readonly_with_cookies
+    return 0
+  fi
+
+  if host_has_existing_account_selector || container_has_existing_account_selector; then
+    echo "run live readonly smoke: selected existing XAccounts"
+    run_live_readonly_with_existing_accounts
     return 0
   fi
 

@@ -4,9 +4,23 @@ import { features, featureCategories } from '../api/config/features.js';
 
 const root = new URL('../', import.meta.url);
 const smokeUsername = process.env.XACTIONS_SMOKE_USERNAME || 'test_account_20260521092255';
-const requireLive = ['1', 'true', 'yes', 'on'].includes(
-  String(process.env.XACTIONS_ACCEPTANCE_REQUIRE_LIVE || '').toLowerCase()
-);
+
+function envBool(name) {
+  return ['1', 'true', 'yes', 'on'].includes(String(process.env[name] || '').trim().toLowerCase());
+}
+
+function envList(name) {
+  return String(process.env[name] || '')
+    .split(',')
+    .map((value) => String(value || '').trim())
+    .filter(Boolean);
+}
+
+function unique(values) {
+  return [...new Set(values)];
+}
+
+const requireLive = envBool('XACTIONS_ACCEPTANCE_REQUIRE_LIVE');
 
 function read(path) {
   return readFileSync(new URL(path, root), 'utf8');
@@ -235,11 +249,43 @@ function auditStaticAcceptance() {
 }
 
 async function auditLiveReadiness() {
+  const liveCookies = [
+    process.env.XACTIONS_LIVE_ACCOUNT_A_COOKIE,
+    process.env.XACTIONS_LIVE_ACCOUNT_B_COOKIE,
+  ].map((value) => String(value || '').trim());
+  const requestedIds = unique([
+    ...envList('XACTIONS_LIVE_ACCOUNT_IDS'),
+    process.env.XACTIONS_LIVE_ACCOUNT_A_ID,
+    process.env.XACTIONS_LIVE_ACCOUNT_B_ID,
+  ]
+    .map((value) => String(value || '').trim())
+    .filter(Boolean));
+  const requestedUsernames = unique([
+    ...envList('XACTIONS_LIVE_ACCOUNT_USERNAMES'),
+    process.env.XACTIONS_LIVE_ACCOUNT_A_USERNAME,
+    process.env.XACTIONS_LIVE_ACCOUNT_B_USERNAME,
+  ]
+    .map((value) => String(value || '').replace(/^@/, '').trim().toLowerCase())
+    .filter(Boolean));
+  const useExisting = envBool('XACTIONS_LIVE_USE_EXISTING_ACCOUNTS');
+  const selectorCount = [
+    requestedIds.length > 0,
+    requestedUsernames.length > 0,
+    useExisting,
+  ].filter(Boolean).length;
+  const readyWithCookies = Boolean(liveCookies[0] && liveCookies[1] && liveCookies[0] !== liveCookies[1]);
+
   if (!process.env.DATABASE_URL) {
     return {
       checked: false,
       ready: false,
       reason: 'DATABASE_URL is not set; live readiness was not checked.',
+      liveCookies: {
+        accountA: Boolean(liveCookies[0]),
+        accountB: Boolean(liveCookies[1]),
+        bothPresent: Boolean(liveCookies[0] && liveCookies[1]),
+        different: readyWithCookies,
+      },
     };
   }
 
@@ -264,12 +310,41 @@ async function auditLiveReadiness() {
           take: 10,
         })
       : [];
-    const ready = Boolean(user && activeAccounts.length >= 2);
+    const activeIds = new Set(activeAccounts.map((account) => account.id));
+    const activeUsernames = new Set(activeAccounts.map((account) => String(account.username || '').toLowerCase()));
+    const readyWithIds = requestedIds.length === 2 && requestedIds.every((id) => activeIds.has(id));
+    const readyWithUsernames = requestedUsernames.length === 2
+      && requestedUsernames.every((username) => activeUsernames.has(username));
+    const readyWithFirstActive = useExisting && activeAccounts.length >= 2;
+    const readyWithExistingAccounts = selectorCount === 1
+      && (readyWithIds || readyWithUsernames || readyWithFirstActive);
+    const reasons = [];
+    if (!user) reasons.push(`Smoke user not found: ${smokeUsername}`);
+    if (liveCookies[0] && liveCookies[1] && liveCookies[0] === liveCookies[1]) {
+      reasons.push('XACTIONS_LIVE_ACCOUNT_A_COOKIE and XACTIONS_LIVE_ACCOUNT_B_COOKIE must be different.');
+    }
+    if (selectorCount > 1) reasons.push('Use only one existing-account selector at a time.');
+    if (!readyWithCookies && !readyWithExistingAccounts) {
+      reasons.push('Provide two live cookies or select exactly two active existing XAccounts.');
+    }
+    const ready = Boolean(user && (readyWithCookies || readyWithExistingAccounts));
     return {
       checked: true,
       ready,
       smokeUsername,
       smokeUserFound: Boolean(user),
+      liveCookies: {
+        accountA: Boolean(liveCookies[0]),
+        accountB: Boolean(liveCookies[1]),
+        bothPresent: Boolean(liveCookies[0] && liveCookies[1]),
+        different: readyWithCookies,
+      },
+      existingSelectors: {
+        ids: requestedIds.length,
+        usernames: requestedUsernames.length,
+        useFirstActive: useExisting,
+        selectorCount,
+      },
       activeXAccounts: activeAccounts.length,
       verifiedActiveXAccounts: activeAccounts.filter((account) => account.lastVerifiedAt).length,
       accounts: activeAccounts.map((account) => ({
@@ -278,6 +353,9 @@ async function auditLiveReadiness() {
         isDefault: account.isDefault,
         verified: Boolean(account.lastVerifiedAt),
       })),
+      readyWithCookies,
+      readyWithExistingAccounts,
+      reasons,
       nextAction: ready
         ? 'Run smoke:console-live-readonly with existing accounts.'
         : 'Register two active XAccounts or provide two live cookies, then run smoke:console-live-readonly.',
