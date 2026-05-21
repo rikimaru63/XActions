@@ -106,6 +106,45 @@ describe('console scheduler helpers', () => {
     expect(explicitAccountIdsFromBody({})).toEqual([]);
   });
 
+  it('connects follower cleanup actions to the console catalog', () => {
+    const nonFollowers = getFeatureById('unfollowNonFollowers');
+    const everyone = getFeatureById('unfollowEveryone');
+
+    expect(nonFollowers).toMatchObject({
+      status: 'available',
+      consoleAction: 'unfollowNonFollowers',
+      supportsDryRun: true,
+      supportsSchedule: true,
+    });
+    expect(everyone).toMatchObject({
+      status: 'available',
+      consoleAction: 'unfollowEveryone',
+      supportsDryRun: true,
+      supportsSchedule: true,
+    });
+  });
+
+  it('builds safe dry-run payloads for follower cleanup actions', () => {
+    const payload = createActionPayload(
+      getFeatureById('unfollowNonFollowers'),
+      { maxUsers: 200, limit: 10 },
+      'dryRun'
+    );
+
+    expect(payload.operationType).toBe('unfollowNonFollowers');
+    expect(payload.operationConfig).toMatchObject({
+      sourceFeatureId: 'unfollowNonFollowers',
+      maxUsers: 200,
+      limit: 10,
+      dryRun: true,
+    });
+    expect(payload.jobConfig).toMatchObject({
+      maxUsers: 200,
+      limit: 10,
+      dryRun: true,
+    });
+  });
+
   it('maps schedule retry settings to queue attempts', () => {
     expect(normalizeScheduleMaxRetries(undefined)).toBe(2);
     expect(normalizeScheduleMaxRetries(0)).toBe(0);

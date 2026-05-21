@@ -1,6 +1,7 @@
 import browserAutomation from '../../browserAutomation.js';
 
 async function unfollowEveryoneBrowser(userId, config, updateProgress) {
+  const dryRun = config.dryRun === true || config.dryRun === 'true';
   const page = await browserAutomation.createPage(config.sessionCookie);
   
   try {
@@ -23,6 +24,7 @@ async function unfollowEveryoneBrowser(userId, config, updateProgress) {
     if (following.length === 0) {
       return {
         success: true,
+        dryRun,
         unfollowed: [],
         message: 'You are not following anyone!'
       };
@@ -30,7 +32,21 @@ async function unfollowEveryoneBrowser(userId, config, updateProgress) {
 
     const unfollowed = [];
     const failed = [];
-    const limit = config.limit || following.length;
+    const limit = Math.min(
+      Math.max(Number(config.limit || config.maxUnfollows) || following.length, 1),
+      following.length
+    );
+
+    if (dryRun) {
+      return {
+        success: true,
+        dryRun: true,
+        unfollowed: [],
+        failed: [],
+        candidates: following.slice(0, limit).map((user) => user.username),
+        totalProcessed: 0,
+      };
+    }
 
     for (let i = 0; i < Math.min(following.length, limit); i++) {
       const user = following[i];
@@ -63,6 +79,7 @@ async function unfollowEveryoneBrowser(userId, config, updateProgress) {
 
     return {
       success: true,
+      dryRun: false,
       unfollowed,
       failed,
       totalProcessed: unfollowed.length + failed.length

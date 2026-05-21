@@ -1096,7 +1096,7 @@
           <span class="badges">
             <span class="badge ${escapeHtml(item.status)}">${escapeHtml(item.statusLabel)}</span>
             ${item.accountRequired ? '<span class="badge">X連携</span>' : ''}
-            ${item.supportsSchedule ? '<span class="badge">予約</span>' : ''}
+            ${item.status === 'available' && item.supportsSchedule ? '<span class="badge">予約</span>' : ''}
           </span>
         </button>
       `).join('');
@@ -1228,6 +1228,11 @@
     }
 
     function renderSchedule(selected) {
+      if (selected.status !== 'available' || !selected.consoleAction) {
+        els.schedulePanel.innerHTML = '<div class="empty">この機能はコンソール予約にまだ対応していません。</div>';
+        return;
+      }
+
       if (!selected.supportsSchedule) {
         els.schedulePanel.innerHTML = '<div class="empty">この機能は予約実行に対応していません。</div>';
         return;

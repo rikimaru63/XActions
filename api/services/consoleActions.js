@@ -169,7 +169,6 @@ function createActionPayload(feature, inputConfig, mode = 'dryRun', user = {}) {
     case 'detectUnfollowers': {
       const username = normalizeUsername(config.username || user.twitterUsername);
       const maxUsers = asNumber(config.maxUsers, 1000, 50, 5000);
-      if (!username) throw new Error('自分のXユーザー名を入力してください。');
 
       return {
         operationType: 'detectUnfollowers',
@@ -183,6 +182,35 @@ function createActionPayload(feature, inputConfig, mode = 'dryRun', user = {}) {
           username,
           maxUsers,
           dryRun: true,
+        },
+      };
+    }
+
+    case 'unfollowNonFollowers':
+    case 'unfollowEveryone': {
+      const username = normalizeUsername(config.username || user.twitterUsername);
+      const maxUsers = asNumber(
+        config.maxUsers,
+        feature.consoleAction === 'unfollowEveryone' ? 500 : 1000,
+        50,
+        5000
+      );
+      const limit = asNumber(config.limit || config.maxUnfollows, 20, 1, 100);
+
+      return {
+        operationType: feature.operationType,
+        operationConfig: {
+          sourceFeatureId: feature.id,
+          username,
+          maxUsers,
+          limit,
+          dryRun,
+        },
+        jobConfig: {
+          username,
+          maxUsers,
+          limit,
+          dryRun,
         },
       };
     }

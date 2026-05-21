@@ -19,7 +19,7 @@ import { autoCommentBrowser } from './operations/puppeteer/autoComment.js';
 import { targetEngageBrowser } from './operations/puppeteer/targetEngage.js';
 import browserAutomation from './browserAutomation.js';
 import { getDecryptedSessionCookie } from '../routes/session-auth.js';
-import { getDecryptedAccountCookie, markAccountSessionExpired } from './accountStore.js';
+import { getAccountForUser, getDecryptedAccountCookie, markAccountSessionExpired } from './accountStore.js';
 import { withAccountExecutionLock } from './accountExecutionLock.js';
 import { refreshParentOperationByChild } from './operationBatches.js';
 import { startScheduledActionScheduler } from './scheduledActions.js';
@@ -298,6 +298,9 @@ async function resolveJobConfig(job) {
   const config = job.data.config || {};
 
   if (job.data.accountId) {
+    const account = job.data.userId
+      ? await getAccountForUser(job.data.userId, job.data.accountId).catch(() => null)
+      : null;
     const accountCookie = job.data.userId
       ? await getDecryptedAccountCookie(job.data.userId, job.data.accountId).catch(() => null)
       : null;
@@ -306,6 +309,8 @@ async function resolveJobConfig(job) {
 
     return {
       ...config,
+      username: config.username || account?.username || undefined,
+      accountUsername: account?.username || undefined,
       sessionCookie: accountCookie,
     };
   }

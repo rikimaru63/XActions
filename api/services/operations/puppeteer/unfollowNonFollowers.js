@@ -1,6 +1,7 @@
 import browserAutomation from '../../browserAutomation.js';
 
 async function unfollowNonFollowersBrowser(userId, config, updateProgress) {
+  const dryRun = config.dryRun === true || config.dryRun === 'true';
   const page = await browserAutomation.createPage(config.sessionCookie);
   
   try {
@@ -39,6 +40,7 @@ async function unfollowNonFollowersBrowser(userId, config, updateProgress) {
     if (nonFollowers.length === 0) {
       return {
         success: true,
+        dryRun,
         unfollowed: [],
         message: 'Everyone you follow also follows you back!'
       };
@@ -47,7 +49,22 @@ async function unfollowNonFollowersBrowser(userId, config, updateProgress) {
     // Unfollow non-followers with rate limiting
     const unfollowed = [];
     const failed = [];
-    const limit = config.limit || nonFollowers.length;
+    const limit = Math.min(
+      Math.max(Number(config.limit || config.maxUnfollows) || nonFollowers.length, 1),
+      nonFollowers.length
+    );
+
+    if (dryRun) {
+      return {
+        success: true,
+        dryRun: true,
+        unfollowed: [],
+        failed: [],
+        candidates: nonFollowers.slice(0, limit).map((user) => user.username),
+        nonFollowers: nonFollowers.map((user) => user.username),
+        totalProcessed: 0,
+      };
+    }
 
     for (let i = 0; i < Math.min(nonFollowers.length, limit); i++) {
       const user = nonFollowers[i];
@@ -74,6 +91,7 @@ async function unfollowNonFollowersBrowser(userId, config, updateProgress) {
 
     return {
       success: true,
+      dryRun: false,
       unfollowed,
       failed,
       nonFollowers: nonFollowers.map(u => u.username),
