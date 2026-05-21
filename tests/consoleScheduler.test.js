@@ -47,6 +47,13 @@ describe('console scheduler helpers', () => {
     expect(html).toContain('state.mode = button.dataset.scheduleMode');
   });
 
+  it('shows skipped run-now results and opens the run history', () => {
+    const html = readFileSync(new URL('../dashboard/console.html', import.meta.url), 'utf8');
+
+    expect(html).toContain('result.skipped ? (result.error ||');
+    expect(html).toContain('await loadScheduleRuns(id);');
+  });
+
   it('parses one-time Asia/Tokyo datetime values', () => {
     const nextRunAt = calculateNextRunAt(
       { type: 'once', runAt: '2026-05-21T18:00', timezone: 'Asia/Tokyo' },

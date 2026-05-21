@@ -1506,9 +1506,14 @@
 
     async function runScheduleNow(id, selected) {
       try {
-        await apiRequest(`/scheduled-actions/${encodeURIComponent(id)}/run-now`, { method: 'POST' });
-        setStatus(els.schedulePanel, '実行を受け付けました。', 'ok');
+        const result = await apiRequest(`/scheduled-actions/${encodeURIComponent(id)}/run-now`, { method: 'POST' });
+        setStatus(
+          els.schedulePanel,
+          result.skipped ? (result.error || '実行をスキップしました。') : '実行を受け付けました。',
+          result.skipped ? 'err' : 'ok'
+        );
         await loadSchedules(selected);
+        await loadScheduleRuns(id);
         await loadHistory();
       } catch (error) {
         setStatus(els.schedulePanel, error.message, 'err');
