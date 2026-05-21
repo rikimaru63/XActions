@@ -237,7 +237,9 @@ case "$SOURCE" in
     fi
 
     echo "live readonly smoke is not ready: activeXAccounts=${active_count}, live cookies missing"
-    echo "Falling back to secure cookie prompt. Press Ctrl+C to stop."
+    if [[ -t 0 ]]; then
+      echo "Falling back to secure cookie prompt. Press Ctrl+C to stop."
+    fi
     prompt_and_run_with_cookie_stdin
     ;;
   diagnose)
