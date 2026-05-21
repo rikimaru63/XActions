@@ -1,4 +1,4 @@
-const hiddenConfigKeys = new Set(['message', 'dmMessage', 'sessionCookie', 'cookie', 'token']);
+const hiddenConfigKeys = new Set(['message', 'dmMessage', 'comment', 'comments', 'sessionCookie', 'cookie', 'token']);
 
 function normalizeUsername(username = '') {
   return String(username).trim().replace(/^@/, '').replace(/[^a-zA-Z0-9_]/g, '');
@@ -161,6 +161,79 @@ function createActionPayload(feature, inputConfig, mode = 'dryRun', user = {}) {
           query,
           targetUsername,
           maxLikes,
+          dryRun,
+        },
+      };
+    }
+
+    case 'followEngagers': {
+      const tweetUrl = String(config.tweetUrl || '').trim();
+      const engagementType = String(config.engagementType || '').trim() === 'retweets' ? 'retweets' : 'likes';
+      const maxFollows = asNumber(config.maxFollows, 10, 1, 50);
+      if (!tweetUrl) throw new Error('ポストURLを入力してください。');
+
+      return {
+        operationType: 'followEngagers',
+        operationConfig: {
+          sourceFeatureId: feature.id,
+          tweetUrl,
+          engagementType,
+          maxFollows,
+          dryRun,
+        },
+        jobConfig: {
+          tweetUrl,
+          engagementType,
+          maxFollows,
+          dryRun,
+        },
+      };
+    }
+
+    case 'keywordFollow': {
+      const query = String(config.query || '').trim();
+      const maxFollows = asNumber(config.maxFollows, 10, 1, 50);
+      if (!query) throw new Error('検索語句を入力してください。');
+
+      return {
+        operationType: 'keywordFollow',
+        operationConfig: {
+          sourceFeatureId: feature.id,
+          query,
+          maxFollows,
+          dryRun,
+        },
+        jobConfig: {
+          query,
+          maxFollows,
+          dryRun,
+        },
+      };
+    }
+
+    case 'autoComment': {
+      const query = String(config.query || '').trim();
+      const targetUsername = normalizeUsername(config.targetUsername);
+      const comment = String(config.comment || '').trim().slice(0, 280);
+      const maxComments = asNumber(config.maxComments, 3, 1, 20);
+      if (!query && !targetUsername) throw new Error('検索語句または対象ユーザーを入力してください。');
+      if (!comment) throw new Error('コメントを入力してください。');
+
+      return {
+        operationType: 'autoComment',
+        operationConfig: {
+          sourceFeatureId: feature.id,
+          query,
+          targetUsername,
+          hasComment: true,
+          maxComments,
+          dryRun,
+        },
+        jobConfig: {
+          query,
+          targetUsername,
+          comment,
+          maxComments,
           dryRun,
         },
       };

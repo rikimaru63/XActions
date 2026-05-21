@@ -145,6 +145,39 @@ describe('console scheduler helpers', () => {
     });
   });
 
+  it('connects growth actions with safe console payloads', () => {
+    expect(getFeatureById('followEngagers')).toMatchObject({
+      status: 'available',
+      consoleAction: 'followEngagers',
+      supportsDryRun: true,
+    });
+    expect(getFeatureById('keywordFollow')).toMatchObject({
+      status: 'available',
+      consoleAction: 'keywordFollow',
+      supportsDryRun: true,
+    });
+    expect(getFeatureById('autoComment')).toMatchObject({
+      status: 'available',
+      consoleAction: 'autoComment',
+      supportsDryRun: true,
+    });
+
+    const commentPayload = createActionPayload(
+      getFeatureById('autoComment'),
+      { query: 'xactions', comment: '確認用コメント', maxComments: 2 },
+      'dryRun'
+    );
+
+    expect(commentPayload.operationType).toBe('autoComment');
+    expect(commentPayload.operationConfig).toMatchObject({
+      hasComment: true,
+      maxComments: 2,
+      dryRun: true,
+    });
+    expect(commentPayload.operationConfig.comment).toBeUndefined();
+    expect(commentPayload.jobConfig.comment).toBe('確認用コメント');
+  });
+
   it('maps schedule retry settings to queue attempts', () => {
     expect(normalizeScheduleMaxRetries(undefined)).toBe(2);
     expect(normalizeScheduleMaxRetries(0)).toBe(0);
