@@ -25,7 +25,10 @@ import {
   normalizeScheduleMaxRetries,
   queueAttemptsForSchedule,
 } from '../api/services/retryPolicy.js';
-import { publicScheduledActionRun } from '../api/services/scheduledActions.js';
+import {
+  assertScheduleAccountRunnable,
+  publicScheduledActionRun,
+} from '../api/services/scheduledActions.js';
 import { calculateNextRunAt } from '../api/services/scheduleUtils.js';
 
 describe('console scheduler helpers', () => {
@@ -766,6 +769,22 @@ describe('console scheduler helpers', () => {
       textPreview: 'public preview',
       sessionCookie: '[hidden]',
     });
+  });
+
+  it('blocks reactivating schedules for unavailable accounts', () => {
+    expect(() => assertScheduleAccountRunnable({
+      accountId: 'acc_1',
+      account: { username: 'active_account', status: 'active' },
+    })).not.toThrow();
+    expect(() => assertScheduleAccountRunnable({ accountId: null })).not.toThrow();
+    expect(() => assertScheduleAccountRunnable({
+      accountId: 'acc_2',
+      account: { username: 'disabled_account', status: 'disabled' },
+    })).toThrow('実行できる状態ではありません');
+    expect(() => assertScheduleAccountRunnable({
+      accountId: 'acc_3',
+      account: null,
+    })).toThrow('実行できる状態ではありません');
   });
 
   it('distinguishes retrying jobs from final failures', () => {

@@ -105,6 +105,17 @@ function validateFeatureForSchedule(feature, mode) {
   }
 }
 
+function assertScheduleAccountRunnable(schedule) {
+  if (!schedule?.accountId) return;
+
+  const username = schedule.account?.username ? `@${schedule.account.username}` : '選択したXアカウント';
+  if (!schedule.account || schedule.account.status !== 'active') {
+    const error = new Error(`${username} は実行できる状態ではありません。連携情報を確認してから予約を再開してください。`);
+    error.statusCode = 400;
+    throw error;
+  }
+}
+
 async function skipScheduledAction(schedule, scheduledFor, message, options = {}) {
   const run = await prisma.scheduledActionRun.create({
     data: {
@@ -431,6 +442,7 @@ export {
   createSchedulesFromRequest,
   decryptScheduledConfig,
   enqueueScheduledAction,
+  assertScheduleAccountRunnable,
   processDueScheduledActions,
   publicScheduledActionRun,
   publicSchedule,

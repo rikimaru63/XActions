@@ -3,6 +3,7 @@ import { PrismaClient } from '@prisma/client';
 import { authMiddleware } from '../middleware/auth.js';
 import { queueJob } from '../services/jobQueue.js';
 import {
+  assertScheduleAccountRunnable,
   createSchedulesFromRequest,
   enqueueScheduledAction,
   publicScheduledActionRun,
@@ -86,6 +87,7 @@ router.patch('/:id', async (req, res) => {
   try {
     const schedule = await prisma.scheduledAction.findFirst({
       where: { id: req.params.id, userId: req.user.id },
+      include: { account: true },
     });
     if (!schedule) return res.status(404).json({ error: '予約が見つかりません。' });
 
@@ -100,6 +102,10 @@ router.patch('/:id', async (req, res) => {
       data.nextRunAt = calculateNextRunAt({ ...schedule, ...scheduleInput });
       if (schedule.status !== 'paused') data.status = 'active';
       data.lastError = null;
+    }
+
+    if (data.status === 'active') {
+      assertScheduleAccountRunnable(schedule);
     }
 
     const updated = await prisma.scheduledAction.update({
@@ -152,8 +158,10 @@ router.post('/:id/resume', async (req, res) => {
   try {
     const schedule = await prisma.scheduledAction.findFirst({
       where: { id: req.params.id, userId: req.user.id },
+      include: { account: true },
     });
     if (!schedule) return res.status(404).json({ error: '予約が見つかりません。' });
+    assertScheduleAccountRunnable(schedule);
 
     const updated = await prisma.scheduledAction.update({
       where: { id: schedule.id },
