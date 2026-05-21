@@ -16,6 +16,7 @@ const username = process.env.XACTIONS_SMOKE_USERNAME || 'test_account_2026052109
 const password = process.env.XACTIONS_SMOKE_PASSWORD || '';
 const smokeId = `ui_accounts_${Date.now()}_${randomUUID().slice(0, 8)}`;
 const accountPrefix = 'smoke_console_ui_';
+const accountFormFailureMessage = 'X\u9023\u643a\u60c5\u5831\u3067\u30ed\u30b0\u30a4\u30f3\u72b6\u614b\u3092\u78ba\u8a8d\u3067\u304d\u307e\u305b\u3093\u3067\u3057\u305f\u3002';
 const created = { accountIds: [] };
 
 function assert(condition, message) {
@@ -121,14 +122,22 @@ async function createUiAccounts(userId) {
   return accounts;
 }
 
-function isIgnorableBadResponse(item) {
-  return item.includes('/favicon.ico');
+function isIgnorableBadResponse(item, expectedUrls = new Set()) {
+  if (item.includes('/favicon.ico')) return true;
+  const match = item.match(/^(\d+)\s+(.+)$/);
+  return match?.[1] === '401' && expectedUrls.has(match[2]);
 }
 
 function isMockedUiListRequest(request) {
   if (request.method() !== 'GET') return false;
   const url = new URL(request.url());
   return url.pathname === '/api/console/history' || url.pathname === '/api/scheduled-actions';
+}
+
+function isMockedAccountCreateRequest(request) {
+  if (request.method() !== 'POST') return false;
+  const url = new URL(request.url());
+  return url.pathname === '/api/accounts';
 }
 
 function accountIdSet(ids) {
@@ -152,6 +161,8 @@ try {
   const badResponses = [];
   const failedRequests = [];
   const filterRequests = [];
+  const accountCreateRequests = [];
+  const expectedBadResponseUrls = new Set();
 
   page.on('pageerror', (error) => pageErrors.push(error.message));
   page.on('console', (message) => {
@@ -165,6 +176,23 @@ try {
   });
   await page.setRequestInterception(true);
   page.on('request', (request) => {
+    if (isMockedAccountCreateRequest(request)) {
+      let payload = {};
+      try {
+        payload = JSON.parse(request.postData() || '{}');
+      } catch {
+        payload = { raw: request.postData() || '' };
+      }
+      accountCreateRequests.push(payload);
+      expectedBadResponseUrls.add(request.url());
+      request.respond({
+        status: 401,
+        contentType: 'application/json; charset=utf-8',
+        body: JSON.stringify({ error: accountFormFailureMessage }),
+      });
+      return;
+    }
+
     if (isMockedUiListRequest(request)) {
       const url = new URL(request.url());
       filterRequests.push({
@@ -186,6 +214,33 @@ try {
   await page.evaluate((value) => localStorage.setItem('authToken', value), authToken);
   await page.goto(`${baseUrl}/console`, { waitUntil: 'networkidle2', timeout: 60000 });
   await page.waitForSelector('#account-list [data-account-sidebar-choice]', { timeout: 30000 });
+
+  const accountFormUsername = `${accountPrefix}form_invalid_${smokeId}`;
+  const accountFormCookie = `invalid_cookie=${smokeId}`;
+  await page.click('#toggle-account-form');
+  await page.waitForSelector('#account-form:not(.hidden) #new-account-username', { timeout: 10000 });
+  await page.type('#new-account-username', accountFormUsername);
+  await page.type('#new-account-cookie', accountFormCookie);
+  await page.click('#account-form button[type="submit"]');
+  await page.waitForFunction(
+    (message) => {
+      const status = document.querySelector('#account-form .status');
+      return status?.classList.contains('err') && status.textContent.includes(message);
+    },
+    {},
+    accountFormFailureMessage
+  );
+
+  const accountForm = await page.evaluate(() => {
+    const status = document.querySelector('#account-form .status');
+    return {
+      statusText: status?.textContent?.trim() || '',
+      statusClass: status?.className || '',
+      usernameValue: document.querySelector('#new-account-username')?.value || '',
+      cookieValue: document.querySelector('#new-account-cookie')?.value || '',
+      defaultChecked: !!document.querySelector('#new-account-default')?.checked,
+    };
+  });
 
   const sidebar = await page.evaluate(() => ({
     accountName: document.querySelector('#account-name')?.textContent?.trim(),
@@ -257,10 +312,21 @@ try {
       && request.accountIds.join(',') === selectedAccountIds.join(',')
     )),
   };
-  const blockingBadResponses = badResponses.filter((item) => !isIgnorableBadResponse(item));
+  const accountFormChecks = {
+    requestCaptured: accountCreateRequests.length === 1,
+    usernameSubmitted: accountCreateRequests[0]?.username === accountFormUsername,
+    cookieSubmitted: accountCreateRequests[0]?.sessionCookie === accountFormCookie,
+    failureVisible: accountForm.statusClass.includes('err')
+      && accountForm.statusText.includes(accountFormFailureMessage),
+    valuesPreserved: accountForm.usernameValue === accountFormUsername
+      && accountForm.cookieValue === accountFormCookie
+      && accountForm.defaultChecked === false,
+  };
+  const blockingBadResponses = badResponses.filter((item) => !isIgnorableBadResponse(item, expectedBadResponseUrls));
   const blockingConsoleErrors = consoleErrors.filter((item) => !item.includes('Failed to load resource'));
 
-  const ok = sidebar.accountName === `@${defaultAccount.username}`
+  const ok = Object.values(accountFormChecks).every(Boolean)
+    && sidebar.accountName === `@${defaultAccount.username}`
     && sidebar.accountState === '3件 / 2件が実行可能'
     && defaultSidebar
     && !defaultSidebar.disabled
@@ -288,6 +354,9 @@ try {
     baseUrl,
     smokeId,
     accounts,
+    accountForm,
+    accountCreateRequests,
+    accountFormChecks,
     sidebar,
     management,
     filterChecks,
