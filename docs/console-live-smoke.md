@@ -38,6 +38,14 @@ docker cp "$api":/app/scripts/run-console-live-readonly-host.sh /tmp/xactions-li
 bash /tmp/xactions-live-readonly.sh
 ```
 
+既定の `XACTIONS_LIVE_READONLY_SOURCE=auto` は、利用可能な情報から安全な順に実行方法を選びます:
+
+1. ホスト環境変数に2件のlive cookieがあればそれを使う
+2. 既存アカウントのIDまたはユーザー名が指定されていればそれを使う
+3. smokeユーザーにactive XAccountが2件以上あれば先頭2件を使う
+4. APIコンテナ環境変数に2件のlive cookieがあればそれを使う
+5. 何も準備できていない場合は非表示入力のcookieプロンプトに戻る
+
 登録済み active XAccount 2件を使う場合:
 
 ```bash

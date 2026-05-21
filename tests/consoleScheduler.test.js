@@ -203,6 +203,17 @@ describe('console scheduler helpers', () => {
     expect(mixedSelectors.reasons.join(' ')).toContain('Use only one existing-account selector');
   });
 
+  it('auto-runs the host live readonly smoke when two active XAccounts exist', () => {
+    const script = readFileSync(new URL('../scripts/run-console-live-readonly-host.sh', import.meta.url), 'utf8');
+
+    expect(script).toContain('SOURCE="${XACTIONS_LIVE_READONLY_SOURCE:-auto}"');
+    expect(script).toContain('auto|prompt|env|existing|diagnose');
+    expect(script).toContain('active_xaccount_count()');
+    expect(script).toContain('if [[ "$active_count" -ge 2 ]]; then');
+    expect(script).toContain('run live readonly smoke: existing active XAccounts');
+    expect(script).toContain('XACTIONS_LIVE_USE_EXISTING_ACCOUNTS=true');
+  });
+
   it('shows skipped run-now results and opens the run history', () => {
     const html = readFileSync(new URL('../dashboard/console.html', import.meta.url), 'utf8');
 

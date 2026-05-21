@@ -6,7 +6,7 @@ APP_UUID="${XACTIONS_COOLIFY_APP_UUID:-sg008w80csw08skkwcwswwgw}"
 SMOKE_USERNAME="${XACTIONS_SMOKE_USERNAME:-test_account_20260521092255}"
 PROFILE_TARGET="${XACTIONS_LIVE_PROFILE_TARGET:-x}"
 API_CONTAINER="${XACTIONS_API_CONTAINER:-}"
-SOURCE="${XACTIONS_LIVE_READONLY_SOURCE:-prompt}"
+SOURCE="${XACTIONS_LIVE_READONLY_SOURCE:-auto}"
 
 find_api_container() {
   docker ps --format '{{.Names}}' | grep "^api-${APP_UUID}" | head -n 1
@@ -22,9 +22,9 @@ require_command() {
 require_command docker
 
 case "$SOURCE" in
-  prompt|env|existing|diagnose) ;;
+  auto|prompt|env|existing|diagnose) ;;
   *)
-    echo "XACTIONS_LIVE_READONLY_SOURCE must be prompt, env, existing, or diagnose." >&2
+    echo "XACTIONS_LIVE_READONLY_SOURCE must be auto, prompt, env, existing, or diagnose." >&2
     exit 1
     ;;
 esac
@@ -73,6 +73,10 @@ host_has_existing_account_selector() {
   env_true "${XACTIONS_LIVE_USE_EXISTING_ACCOUNTS:-}"
 }
 
+host_has_live_cookies() {
+  [[ -n "${XACTIONS_LIVE_ACCOUNT_A_COOKIE:-}" && -n "${XACTIONS_LIVE_ACCOUNT_B_COOKIE:-}" ]]
+}
+
 if [[ -z "$API_CONTAINER" ]]; then
   API_CONTAINER="$(find_api_container)"
 fi
@@ -99,6 +103,32 @@ esac
   || [ -n "${XACTIONS_LIVE_ACCOUNT_A_USERNAME:-}" ] \
   || [ -n "${XACTIONS_LIVE_ACCOUNT_B_USERNAME:-}" ]
 '
+}
+
+container_has_live_cookies() {
+  docker exec "$API_CONTAINER" sh -lc '[ -n "$XACTIONS_LIVE_ACCOUNT_A_COOKIE" ] && [ -n "$XACTIONS_LIVE_ACCOUNT_B_COOKIE" ]'
+}
+
+active_xaccount_count() {
+  docker exec -i \
+    -e "XACTIONS_SMOKE_USERNAME=${SMOKE_USERNAME}" \
+    "$API_CONTAINER" node --input-type=module <<'NODE'
+import { PrismaClient } from '@prisma/client';
+
+const prisma = new PrismaClient();
+try {
+  const user = await prisma.user.findUnique({
+    where: { username: process.env.XACTIONS_SMOKE_USERNAME },
+    select: { id: true },
+  });
+  const count = user
+    ? await prisma.xAccount.count({ where: { userId: user.id, status: 'active' } })
+    : 0;
+  console.log(String(count));
+} finally {
+  await prisma.$disconnect();
+}
+NODE
 }
 
 diagnose_readiness() {
@@ -151,7 +181,55 @@ run_with_cookie_stdin() {
     '
 }
 
+run_with_container_cookies() {
+  docker exec \
+    -e "XACTIONS_BASE_URL=${BASE_URL}" \
+    -e "XACTIONS_SMOKE_USERNAME=${SMOKE_USERNAME}" \
+    -e "XACTIONS_LIVE_PROFILE_TARGET=${PROFILE_TARGET}" \
+    "$API_CONTAINER" npm run smoke:console-live-readonly
+}
+
 case "$SOURCE" in
+  auto)
+    if host_has_live_cookies; then
+      echo "run live readonly smoke: host cookies"
+      run_with_cookie_stdin "$XACTIONS_LIVE_ACCOUNT_A_COOKIE" "$XACTIONS_LIVE_ACCOUNT_B_COOKIE"
+      exit 0
+    fi
+
+    if host_has_existing_account_selector || container_has_existing_account_selector; then
+      echo "run live readonly smoke: selected existing XAccounts"
+      run_with_existing_accounts
+      exit 0
+    fi
+
+    active_count="$(active_xaccount_count)"
+    if [[ "$active_count" -ge 2 ]]; then
+      echo "run live readonly smoke: existing active XAccounts (${active_count})"
+      run_with_existing_accounts
+      exit 0
+    fi
+
+    if container_has_live_cookies; then
+      echo "run live readonly smoke: container cookies"
+      run_with_container_cookies
+      exit 0
+    fi
+
+    echo "live readonly smoke is not ready: activeXAccounts=${active_count}, live cookies missing"
+    echo "Falling back to secure cookie prompt. Press Ctrl+C to stop."
+    read -rsp 'X Cookie A: ' COOKIE_A
+    echo
+    read -rsp 'X Cookie B: ' COOKIE_B
+    echo
+    if [[ -z "$COOKIE_A" || -z "$COOKIE_B" ]]; then
+      unset COOKIE_A COOKIE_B
+      echo "Both cookies are required." >&2
+      exit 1
+    fi
+    run_with_cookie_stdin "$COOKIE_A" "$COOKIE_B"
+    unset COOKIE_A COOKIE_B
+    ;;
   diagnose)
     diagnose_readiness
     ;;
