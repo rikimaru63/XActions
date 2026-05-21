@@ -335,6 +335,49 @@ function createActionPayload(feature, inputConfig, mode = 'dryRun', user = {}) {
       };
     }
 
+    case 'extractVideo': {
+      const tweetUrl = String(config.tweetUrl || '').trim();
+      if (!tweetUrl) throw new Error('投稿URLを入力してください。');
+
+      return {
+        operationType: 'extractVideo',
+        operationConfig: {
+          sourceFeatureId: feature.id,
+          tweetUrl,
+          dryRun: true,
+        },
+        jobConfig: {
+          tweetUrl,
+          dryRun: true,
+        },
+      };
+    }
+
+    case 'unrollThread': {
+      const tweetUrl = String(config.tweetUrl || '').trim();
+      const requestedFormat = String(config.format || 'text').trim().toLowerCase();
+      const format = ['text', 'markdown', 'json'].includes(requestedFormat) ? requestedFormat : 'text';
+      const maxTweets = asNumber(config.maxTweets, 100, 1, 100);
+      if (!tweetUrl) throw new Error('投稿URLを入力してください。');
+
+      return {
+        operationType: 'unrollThread',
+        operationConfig: {
+          sourceFeatureId: feature.id,
+          tweetUrl,
+          format,
+          maxTweets,
+          dryRun: true,
+        },
+        jobConfig: {
+          tweetUrl,
+          format,
+          maxTweets,
+          dryRun: true,
+        },
+      };
+    }
+
     case 'postTweet': {
       const text = String(config.text || '').trim().slice(0, 25000);
       const replyTo = String(config.replyTo || '').trim();

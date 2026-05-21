@@ -274,6 +274,63 @@ describe('console scheduler helpers', () => {
     expect(poll.jobConfig.options).toEqual(['A', 'B']);
   });
 
+  it('connects utility collection actions without requiring an X account', () => {
+    expect(getFeatureById('video')).toMatchObject({
+      status: 'available',
+      consoleAction: 'extractVideo',
+      accountRequired: false,
+      supportsSchedule: false,
+    });
+    expect(getFeatureById('thread')).toMatchObject({
+      status: 'available',
+      consoleAction: 'unrollThread',
+      accountRequired: false,
+      supportsSchedule: false,
+    });
+  });
+
+  it('builds payloads for utility collection actions', () => {
+    const video = createActionPayload(
+      getFeatureById('video'),
+      { tweetUrl: 'https://x.com/user/status/123' },
+      'dryRun'
+    );
+    expect(video).toMatchObject({
+      operationType: 'extractVideo',
+      operationConfig: {
+        sourceFeatureId: 'video',
+        tweetUrl: 'https://x.com/user/status/123',
+        dryRun: true,
+      },
+      jobConfig: {
+        tweetUrl: 'https://x.com/user/status/123',
+        dryRun: true,
+      },
+    });
+
+    const thread = createActionPayload(
+      getFeatureById('thread'),
+      { tweetUrl: 'https://x.com/user/status/456', format: 'markdown', maxTweets: 25 },
+      'live'
+    );
+    expect(thread).toMatchObject({
+      operationType: 'unrollThread',
+      operationConfig: {
+        sourceFeatureId: 'thread',
+        tweetUrl: 'https://x.com/user/status/456',
+        format: 'markdown',
+        maxTweets: 25,
+        dryRun: true,
+      },
+      jobConfig: {
+        tweetUrl: 'https://x.com/user/status/456',
+        format: 'markdown',
+        maxTweets: 25,
+        dryRun: true,
+      },
+    });
+  });
+
   it('maps schedule retry settings to queue attempts', () => {
     expect(normalizeScheduleMaxRetries(undefined)).toBe(2);
     expect(normalizeScheduleMaxRetries(0)).toBe(0);

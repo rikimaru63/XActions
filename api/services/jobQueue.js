@@ -26,6 +26,8 @@ import browserAutomation, {
   scrapeProfile,
   searchTweets as searchTweetsWithCookie,
 } from './browserAutomation.js';
+import { extractThread, formatAsMarkdown, formatAsText } from './threadExtractor.js';
+import { extractVideo } from './videoExtractor.js';
 import { getBookmarks } from '../../src/bookmarkManager.js';
 import { getTrends } from '../../src/discoveryExplore.js';
 import { getConversations } from '../../src/dmManager.js';
@@ -541,6 +543,43 @@ operationsQueue.process('getConversations', 1, async (job) => {
   } finally {
     await page.close();
   }
+});
+
+operationsQueue.process('extractVideo', 1, async (job) => {
+  console.log(`🔄 Processing job ${job.id}: extractVideo`);
+
+  const config = job.data.config || {};
+  return extractVideo(config.tweetUrl || config.url);
+});
+
+operationsQueue.process('unrollThread', 1, async (job) => {
+  console.log(`🔄 Processing job ${job.id}: unrollThread`);
+
+  const config = job.data.config || {};
+  const thread = await extractThread(config.tweetUrl || config.url, {
+    maxTweets: config.maxTweets || 100,
+  });
+
+  if (config.format === 'markdown') {
+    return {
+      ...thread,
+      format: 'markdown',
+      formatted: formatAsMarkdown(thread),
+    };
+  }
+
+  if (config.format === 'json') {
+    return {
+      ...thread,
+      format: 'json',
+    };
+  }
+
+  return {
+    ...thread,
+    format: 'text',
+    formatted: formatAsText(thread),
+  };
 });
 
 // Process jobs - posting actions
