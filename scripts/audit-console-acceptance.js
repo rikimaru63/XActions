@@ -40,6 +40,7 @@ function auditStaticAcceptance() {
   const scheduledRoute = read('api/routes/scheduled-actions.js');
   const scheduledService = read('api/services/scheduledActions.js');
   const jobQueue = read('api/services/jobQueue.js');
+  const queuePayload = read('api/services/queuePayload.js');
   const accountStore = read('api/services/accountStore.js');
   const accountSelection = read('api/services/accountSelection.js');
   const uiSmoke = read('scripts/smoke-console-ui.js');
@@ -133,6 +134,14 @@ function auditStaticAcceptance() {
     'pauseActiveSchedulesForAccount',
     'isSessionExpiredError',
     'expiredAccountGuidance',
+  ]);
+
+  const queuePayloadMissing = hasAll(queuePayload + jobQueue, [
+    'sanitizeQueueJobData',
+    'sensitiveQueueKeys',
+    'sessionCookie',
+    "sanitized.authMethod = 'session'",
+    'operationsQueue.add(sanitizedJobData.type, sanitizedJobData',
   ]);
 
   const workerRestartMissing = hasAll(workerRestartHost + productionSmoke, [
@@ -241,6 +250,13 @@ function auditStaticAcceptance() {
       sessionExpiredMissing.length === 0,
       { script: 'smoke:console-ui-accounts' },
       sessionExpiredMissing
+    ),
+    item(
+      'queue-payload-secrets',
+      'Queued jobs do not carry session cookies or token material; workers restore session data from DB at execution time.',
+      queuePayloadMissing.length === 0,
+      { service: 'api/services/queuePayload.js', queue: 'api/services/jobQueue.js' },
+      queuePayloadMissing
     ),
     item(
       'production-smoke',

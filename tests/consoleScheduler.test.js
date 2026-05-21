@@ -21,6 +21,7 @@ import {
   recoverRetryConfig,
 } from '../api/services/consoleRetryConfig.js';
 import { summarizeChildStatuses } from '../api/services/operationBatches.js';
+import { sanitizeQueueJobData } from '../api/services/queuePayload.js';
 import {
   getJobRetryState,
   normalizeScheduleMaxRetries,
@@ -275,6 +276,32 @@ describe('console scheduler helpers', () => {
     expect(shouldSerializeAccountJob({
       config: { dryRun: false },
     })).toBe(false);
+  });
+
+  it('removes session material from queued job payloads', () => {
+    const jobData = sanitizeQueueJobData({
+      type: 'getProfile',
+      operationId: 'op_1',
+      userId: 'user_1',
+      authMethod: 'oauth',
+      config: {
+        username: 'source_user',
+        sessionCookie: 'auth_token=secret',
+        nested: {
+          refreshToken: 'refresh-secret',
+          keep: 'visible',
+        },
+      },
+    });
+
+    expect(jobData.authMethod).toBe('session');
+    expect(jobData.config).toEqual({
+      username: 'source_user',
+      nested: {
+        keep: 'visible',
+      },
+    });
+    expect(JSON.stringify(jobData)).not.toContain('secret');
   });
 
   it('detects X session expiration errors', () => {

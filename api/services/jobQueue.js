@@ -63,6 +63,7 @@ import { getDecryptedSessionCookie } from '../routes/session-auth.js';
 import { getAccountForUser, getDecryptedAccountCookie, markAccountSessionExpired } from './accountStore.js';
 import { withAccountExecutionLock } from './accountExecutionLock.js';
 import { refreshParentOperationByChild } from './operationBatches.js';
+import { sanitizeQueueJobData } from './queuePayload.js';
 import { startScheduledActionScheduler } from './scheduledActions.js';
 import { getJobRetryState, normalizeScheduleMaxRetries } from './retryPolicy.js';
 
@@ -101,7 +102,7 @@ for (const client of [operationsQueue.client, operationsQueue.eclient, operation
 /**
  * Add a new job to the queue
  * @param {string} type - Job type (operation name)
- * @param {object} data - Job data including sessionCookie, config, etc.
+ * @param {object} data - Job data including userId, config, etc.
  * @param {object} options - Queue options (priority, delay, etc.)
  */
 async function addJob(type, data, options = {}) {
@@ -137,18 +138,19 @@ async function addJob(type, data, options = {}) {
  * Queue job (legacy function for backward compatibility)
  */
 async function queueJob(jobData) {
-  const explicitJobId = jobData.operationId || jobData.id;
-  const attempts = Number(jobData.attempts);
-  const delay = Number(jobData.delay);
-  const job = await operationsQueue.add(jobData.type, jobData, {
-    priority: jobData.priority || 10,
+  const sanitizedJobData = sanitizeQueueJobData(jobData);
+  const explicitJobId = sanitizedJobData.operationId || sanitizedJobData.id;
+  const attempts = Number(sanitizedJobData.attempts);
+  const delay = Number(sanitizedJobData.delay);
+  const job = await operationsQueue.add(sanitizedJobData.type, sanitizedJobData, {
+    priority: sanitizedJobData.priority || 10,
     ...(Number.isFinite(delay) && delay > 0 ? { delay } : {}),
     ...(Number.isFinite(attempts) && attempts > 0 ? { attempts: Math.trunc(attempts) } : {}),
-    ...(jobData.backoff ? { backoff: jobData.backoff } : {}),
+    ...(sanitizedJobData.backoff ? { backoff: sanitizedJobData.backoff } : {}),
     ...(explicitJobId ? { jobId: explicitJobId } : {})
   });
   
-  console.log(`📨 Job queued: ${job.id} (${jobData.type})`);
+  console.log(`📨 Job queued: ${job.id} (${sanitizedJobData.type})`);
   return job;
 }
 
