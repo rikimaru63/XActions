@@ -14,6 +14,7 @@ This smoke checks the production items from `docs/console-scheduler-multiaccount
 - console locale audit that blocks mojibake in the main console and related account/schedule APIs
 - scheduler smoke coverage for expired account visibility, execution rejection,
   schedule rejection, and no operation/schedule residue
+- schedule management coverage for pause, update, resume, delete, and deleted lookup handling
 - automatic due schedule coverage proving the worker picks persisted once
   schedules from the database without using run-now
 - headless Puppeteer / browserAutomation launch

@@ -563,6 +563,86 @@ async function exerciseAutomaticDueScheduler(token, accountIds) {
   };
 }
 
+async function exerciseScheduleManagementApi(token, accountId) {
+  const initialRunAt = new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString();
+  const createResponse = await requestJson('/api/console/actions/schedule', {
+    method: 'POST',
+    token,
+    body: {
+      featureId: 'postTweet',
+      mode: 'dryRun',
+      name: `Console schedule management smoke ${smokeId}`,
+      accountIds: [accountId],
+      maxRetries: 0,
+      config: {
+        text: `[${smokeId}] schedule management dry run`,
+      },
+      schedule: {
+        type: 'once',
+        runAt: initialRunAt,
+        timezone: 'Asia/Tokyo',
+      },
+    },
+  });
+
+  const schedule = createResponse.schedules?.[0];
+  assert(schedule?.id, 'Schedule management smoke did not create a schedule.');
+  assert(schedule.accountId === accountId, 'Schedule management smoke created the schedule for the wrong account.');
+  pushUnique(created.scheduleIds, [schedule.id]);
+
+  const pauseResponse = await requestJson(`/api/scheduled-actions/${schedule.id}/pause`, {
+    method: 'POST',
+    token,
+  });
+  assert(pauseResponse.schedule?.status === 'paused', 'POST /api/scheduled-actions/:id/pause did not pause the schedule.');
+
+  const updatedName = `Updated schedule management ${smokeId}`;
+  const updatedRunAt = new Date(Date.now() + 3 * 60 * 60 * 1000).toISOString();
+  const patchResponse = await requestJson(`/api/scheduled-actions/${schedule.id}`, {
+    method: 'PATCH',
+    token,
+    body: {
+      name: updatedName,
+      maxRetries: 1,
+      schedule: {
+        type: 'once',
+        runAt: updatedRunAt,
+        timezone: 'Asia/Tokyo',
+      },
+    },
+  });
+  assert(patchResponse.schedule?.name === updatedName, 'PATCH /api/scheduled-actions/:id did not update the name.');
+  assert(patchResponse.schedule?.maxRetries === 1, 'PATCH /api/scheduled-actions/:id did not update maxRetries.');
+  assert(patchResponse.schedule?.status === 'paused', 'PATCH should keep an already paused schedule paused.');
+
+  const resumeResponse = await requestJson(`/api/scheduled-actions/${schedule.id}/resume`, {
+    method: 'POST',
+    token,
+  });
+  assert(resumeResponse.schedule?.status === 'active', 'POST /api/scheduled-actions/:id/resume did not resume the schedule.');
+  assert(new Date(resumeResponse.schedule.nextRunAt).getTime() > Date.now(), 'Resumed schedule did not keep a future nextRunAt.');
+
+  const deleteResponse = await requestJson(`/api/scheduled-actions/${schedule.id}`, {
+    method: 'DELETE',
+    token,
+  });
+  assert(deleteResponse.deleted === true, 'DELETE /api/scheduled-actions/:id did not confirm deletion.');
+
+  const getDeleted = await requestJsonExpectFailure(`/api/scheduled-actions/${schedule.id}`, { token }, 404);
+  assert(getDeleted.body?.error, 'Deleted schedule lookup did not include an error message.');
+
+  return {
+    scheduleId: schedule.id,
+    accountId,
+    pausedStatus: pauseResponse.schedule.status,
+    patchedName: patchResponse.schedule.name,
+    patchedMaxRetries: patchResponse.schedule.maxRetries,
+    resumedStatus: resumeResponse.schedule.status,
+    deleted: deleteResponse.deleted,
+    deletedLookupStatus: getDeleted.status,
+  };
+}
+
 function findSensitiveJobDataLeaks(value, path = 'job.data') {
   const leaks = [];
   if (value === null || typeof value === 'undefined') return leaks;
@@ -754,6 +834,8 @@ async function main() {
     'Created schedules are not visible from the account-filtered schedule list.'
   );
 
+  const scheduleManagement = await exerciseScheduleManagementApi(token, accountIds[0]);
+
   const runNowResponses = [];
   for (const schedule of schedules) {
     const runNow = await requestJson(`/api/scheduled-actions/${schedule.id}/run-now`, {
@@ -821,6 +903,7 @@ async function main() {
       })),
     },
     automaticDue,
+    scheduleManagement,
     schedules: schedules.map((schedule) => ({
       id: schedule.id,
       accountId: schedule.accountId,
