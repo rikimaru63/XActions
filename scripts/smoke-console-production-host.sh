@@ -172,6 +172,9 @@ try {
 }
 NODE
 
+docker exec "$API_CONTAINER" npm run audit:console-catalog
+echo "ok console catalog audit"
+
 docker exec "$API_CONTAINER" npm run verify:headless
 echo "ok headless browser"
 

@@ -208,6 +208,44 @@ const hiddenStringsByFeature = {
   priceCorrelation: ['secret-market-tweet'],
 };
 
+const sensitivePayloadKeys = new Set([
+  'sessionCookie',
+  'encryptedCookie',
+  'cookie',
+  'cookies',
+  'authToken',
+  'accessToken',
+  'refreshToken',
+  'password',
+  'secret',
+]);
+
+const sensitiveProbeConfig = {
+  sessionCookie: 'auth_token=leaked-session-cookie',
+  encryptedCookie: 'encrypted-cookie-leak',
+  cookie: 'auth_token=leaked-cookie',
+  cookies: 'ct0=leaked-csrf-cookie',
+  authToken: 'leaked-auth-token',
+  accessToken: 'leaked-access-token',
+  refreshToken: 'leaked-refresh-token',
+  password: 'leaked-password',
+  secret: 'leaked-secret',
+};
+
+const sensitiveProbeUser = {
+  twitterUsername: 'source_account',
+  sessionCookie: 'auth_token=leaked-user-session',
+  twitterAccessToken: 'leaked-user-access-token',
+  twitterRefreshToken: 'leaked-user-refresh-token',
+};
+
+const sensitiveProbeValues = [
+  ...Object.values(sensitiveProbeConfig),
+  sensitiveProbeUser.sessionCookie,
+  sensitiveProbeUser.twitterAccessToken,
+  sensitiveProbeUser.twitterRefreshToken,
+];
+
 function assert(condition, message) {
   if (!condition) throw new Error(message);
 }
@@ -218,6 +256,35 @@ function workerProcessors() {
     [...source.matchAll(/operationsQueue\.process\(['"]([^'"]+)['"]/g)]
       .map((match) => match[1])
   );
+}
+
+function sensitivePayloadLeaks(value, label, path = label) {
+  const leaks = [];
+  if (value === null || typeof value === 'undefined') return leaks;
+
+  if (typeof value === 'string') {
+    for (const secret of sensitiveProbeValues) {
+      if (secret && value.includes(secret)) leaks.push(`${path}: contains ${secret}`);
+    }
+    return leaks;
+  }
+
+  if (typeof value !== 'object') return leaks;
+
+  if (Array.isArray(value)) {
+    value.forEach((item, index) => {
+      leaks.push(...sensitivePayloadLeaks(item, label, `${path}[${index}]`));
+    });
+    return leaks;
+  }
+
+  for (const [key, item] of Object.entries(value)) {
+    const itemPath = `${path}.${key}`;
+    if (sensitivePayloadKeys.has(key)) leaks.push(`${itemPath}: forbidden key`);
+    leaks.push(...sensitivePayloadLeaks(item, label, itemPath));
+  }
+
+  return leaks;
 }
 
 function auditCatalog() {
@@ -251,11 +318,15 @@ function auditCatalog() {
     for (const mode of ['dryRun', 'live']) {
       const shouldSucceed = mode === 'live' || feature.supportsDryRun;
       try {
+        const config = {
+          ...sampleConfigByFeature[feature.id],
+          ...sensitiveProbeConfig,
+        };
         const payload = createActionPayload(
           feature,
-          sampleConfigByFeature[feature.id],
+          config,
           mode,
-          { twitterUsername: 'source_account' }
+          sensitiveProbeUser
         );
 
         if (!shouldSucceed) {
@@ -275,6 +346,14 @@ function auditCatalog() {
           if (serializedOperationConfig.includes(secret)) {
             missing.push(`${feature.id}: ${mode} operationConfig leaks ${secret}`);
           }
+        }
+
+        const sensitiveLeaks = [
+          ...sensitivePayloadLeaks(payload.operationConfig, `${feature.id}.${mode}.operationConfig`),
+          ...sensitivePayloadLeaks(payload.jobConfig, `${feature.id}.${mode}.jobConfig`),
+        ];
+        if (sensitiveLeaks.length) {
+          missing.push(`${feature.id}: ${mode} payload leaked sensitive fields: ${sensitiveLeaks.join('; ')}`);
         }
 
         payloads.push({
@@ -318,6 +397,7 @@ function auditCatalog() {
       total: category.total,
       available: category.available,
     })),
+    sensitivePayloadsHidden: true,
     queueTypes: [...new Set(consoleFeatures.map((feature) => feature.queueType || feature.operationType))].sort(),
     payloadCount: payloads.length,
     ...(verbose ? { payloads } : {}),
