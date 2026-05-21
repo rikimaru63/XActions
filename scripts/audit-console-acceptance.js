@@ -119,6 +119,16 @@ function auditStaticAcceptance() {
     'accountIds: collectAccountIds',
   ]);
 
+  const accountScopedHistoryMissing = hasAll(accountSelection + dashboard + consoleRoute + scheduledRoute + accountUiSmoke, [
+    'function accountQuery',
+    'accountIds=${encodeURIComponent(state.selectedAccountIds.join',
+    'operationAccountHistoryWhere(allowedIds)',
+    'where.accountId = allowedIds.length === 1 ? allowedIds[0] : { in: allowedIds }',
+    'filterChecks',
+    'historyByAccounts',
+    'schedulesByAccounts',
+  ]);
+
   const livePacingMissing = hasAll(accountExecutionLock + consoleActions, [
     'shouldThrottleAccountJob',
     'highRiskActionTypes',
@@ -294,6 +304,13 @@ function auditStaticAcceptance() {
       accountSelectionMissing.length === 0,
       { maxAccounts: 2 },
       accountSelectionMissing
+    ),
+    item(
+      'account-scoped-history-schedules',
+      'History and schedule lists can be filtered by selected X accounts.',
+      accountScopedHistoryMissing.length === 0,
+      { script: 'smoke:console-ui-accounts', query: 'accountIds' },
+      accountScopedHistoryMissing
     ),
     item(
       'live-action-pacing',
