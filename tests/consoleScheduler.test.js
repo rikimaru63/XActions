@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { readFileSync } from 'fs';
 import { getFeatureById, getPublicFeatureCatalog } from '../api/config/features.js';
 import { shouldSerializeAccountJob } from '../api/services/accountExecutionLock.js';
 import {
@@ -22,6 +23,16 @@ import {
 import { calculateNextRunAt } from '../api/services/scheduleUtils.js';
 
 describe('console scheduler helpers', () => {
+  it('keeps console status labels aligned with the Japanese UI spec', () => {
+    const html = readFileSync(new URL('../dashboard/console.html', import.meta.url), 'utf8');
+
+    for (const label of ['未連携', '確認のみ', '予約済み', '実行中', '完了', '失敗']) {
+      expect(html).toContain(label);
+    }
+    expect(html).toContain("pending: '予約済み'");
+    expect(html).toContain("active: '予約済み'");
+  });
+
   it('parses one-time Asia/Tokyo datetime values', () => {
     const nextRunAt = calculateNextRunAt(
       { type: 'once', runAt: '2026-05-21T18:00', timezone: 'Asia/Tokyo' },
