@@ -18,6 +18,7 @@ This smoke checks the production items from `docs/console-scheduler-multiaccount
 - automatic due schedule coverage proving the worker picks persisted once
   schedules from the database without using run-now
 - stale-lock recovery coverage proving old locked due schedules are picked up again
+- console UI navigation coverage proving all categories, settings, schedules, history, and live confirmation modal render
 - account UI state coverage proving active and expired accounts render correctly and expired accounts are disabled
 - headless Puppeteer / browserAutomation launch
 - worker container running

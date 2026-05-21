@@ -93,6 +93,22 @@ try {
     bodySample: document.body.textContent.replace(/\s+/g, ' ').trim().slice(0, 220),
   }));
 
+  await page.click('[data-mode="live"]');
+  await page.waitForFunction(() => document.querySelector('[data-mode="live"]')?.classList.contains('active'));
+  await page.click('#execute-btn');
+  await page.waitForFunction(() => !document.querySelector('#confirm-modal')?.classList.contains('hidden'));
+  const confirmation = await page.evaluate(() => ({
+    visible: !document.querySelector('#confirm-modal')?.classList.contains('hidden'),
+    title: document.querySelector('#confirm-title')?.textContent?.trim(),
+    message: document.querySelector('#confirm-message')?.textContent?.trim(),
+    confirmText: document.querySelector('#confirm-submit')?.textContent?.trim(),
+    cancelText: document.querySelector('#confirm-cancel')?.textContent?.trim(),
+  }));
+  await page.click('#confirm-cancel');
+  await page.waitForFunction(() => document.querySelector('#confirm-modal')?.classList.contains('hidden'));
+  await page.click('[data-mode="dryRun"]');
+  await page.waitForFunction(() => document.querySelector('[data-mode="dryRun"]')?.classList.contains('active'));
+
   const categories = await page.evaluate(() => [...document.querySelectorAll('#category-nav button')].map((button) => {
     const [available, total] = (button.querySelector('.count')?.textContent || '0/0')
       .split('/')
@@ -171,6 +187,11 @@ try {
     && result.lang === 'ja'
     && result.navCount >= 10
     && result.featureCount > 0
+    && confirmation.visible
+    && confirmation.title === '実行前の確認'
+    && confirmation.message.includes('実際に操作されます')
+    && confirmation.confirmText === '実行する'
+    && confirmation.cancelText === '戻る'
     && visitedFeatureTotal >= 33
     && categoryResults.every((category) => category.featureCount === category.total)
     && categoryResults.every((category) => category.tabStates.every((tab) => tab.visible && tab.textLength > 0))
@@ -187,6 +208,7 @@ try {
     ok,
     baseUrl,
     result,
+    confirmation,
     categoryResults,
     visitedFeatureTotal,
     pageErrors,

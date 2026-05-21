@@ -254,6 +254,7 @@ const localeAuditFiles = [
   '../api/services/accountStore.js',
   '../api/services/scheduledActions.js',
   '../api/services/scheduleUtils.js',
+  '../scripts/smoke-console-ui.js',
   '../scripts/smoke-console-ui-accounts.js',
 ];
 
@@ -455,6 +456,8 @@ function auditUi() {
     'data-tab="history"',
     'data-schedule-mode="dryRun"',
     'data-schedule-mode="live"',
+    'id="confirm-modal"',
+    'function requestConfirmation',
     '<html lang="ja">',
   ];
   const missing = requiredSnippets.filter((snippet) => !html.includes(snippet));

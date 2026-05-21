@@ -181,6 +181,12 @@ echo "ok headless browser"
 docker exec \
   -e XACTIONS_BASE_URL="$BASE_URL" \
   -e XACTIONS_SMOKE_USERNAME="$SMOKE_USERNAME" \
+  "$API_CONTAINER" npm run smoke:console-ui
+echo "ok console UI"
+
+docker exec \
+  -e XACTIONS_BASE_URL="$BASE_URL" \
+  -e XACTIONS_SMOKE_USERNAME="$SMOKE_USERNAME" \
   "$API_CONTAINER" npm run smoke:console-ui-accounts
 echo "ok console account UI"
 

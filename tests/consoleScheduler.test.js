@@ -51,6 +51,18 @@ describe('console scheduler helpers', () => {
     expect(html).toContain('state.mode = button.dataset.scheduleMode');
   });
 
+  it('uses an in-console confirmation modal for live and destructive actions', () => {
+    const html = readFileSync(new URL('../dashboard/console.html', import.meta.url), 'utf8');
+
+    expect(html).toContain('id="confirm-modal"');
+    expect(html).toContain('function requestConfirmation');
+    expect(html).toContain("title: '実行前の確認'");
+    expect(html).toContain("title: '実行予約の確認'");
+    expect(html).toContain("title: '再実行の確認'");
+    expect(html).toContain("title: 'Xアカウントを削除'");
+    expect(html).not.toContain('window.confirm');
+  });
+
   it('shows skipped run-now results and opens the run history', () => {
     const html = readFileSync(new URL('../dashboard/console.html', import.meta.url), 'utf8');
 

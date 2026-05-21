@@ -598,6 +598,50 @@
       font-size: 14px;
     }
 
+    .confirm-modal {
+      position: fixed;
+      inset: 0;
+      z-index: 80;
+      display: grid;
+      place-items: center;
+      padding: 18px;
+      background: rgba(0, 0, 0, 0.58);
+    }
+
+    .confirm-card {
+      width: min(420px, 100%);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: var(--surface);
+      box-shadow: 0 24px 80px rgba(0, 0, 0, 0.42);
+      padding: 18px;
+    }
+
+    .confirm-card h2 {
+      margin: 0 0 8px;
+      font-size: 18px;
+      line-height: 1.35;
+      letter-spacing: 0;
+    }
+
+    .confirm-card p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 14px;
+      line-height: 1.65;
+    }
+
+    .confirm-actions {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin-top: 18px;
+    }
+
+    .confirm-actions button {
+      width: 100%;
+    }
+
     .hidden { display: none !important; }
 
     @media (max-width: 1080px) {
@@ -740,6 +784,17 @@
     </aside>
   </div>
 
+  <div class="confirm-modal hidden" id="confirm-modal" role="dialog" aria-modal="true" aria-labelledby="confirm-title" aria-describedby="confirm-message">
+    <div class="confirm-card">
+      <h2 id="confirm-title">確認</h2>
+      <p id="confirm-message"></p>
+      <div class="confirm-actions">
+        <button type="button" class="secondary" id="confirm-cancel">戻る</button>
+        <button type="button" class="danger" id="confirm-submit">実行する</button>
+      </div>
+    </div>
+  </div>
+
   <script>
     const state = {
       catalog: null,
@@ -773,6 +828,16 @@
       settingsPanel: document.getElementById('settings-panel'),
       schedulePanel: document.getElementById('schedule-panel'),
       historyPanel: document.getElementById('history-panel'),
+      confirmModal: document.getElementById('confirm-modal'),
+      confirmTitle: document.getElementById('confirm-title'),
+      confirmMessage: document.getElementById('confirm-message'),
+      confirmCancel: document.getElementById('confirm-cancel'),
+      confirmSubmit: document.getElementById('confirm-submit'),
+    };
+
+    const confirmation = {
+      resolve: null,
+      previousFocus: null,
     };
 
     function escapeHtml(value) {
@@ -861,6 +926,40 @@
       if (!el) return;
       el.textContent = message;
       el.className = `status visible ${type}`;
+    }
+
+    function closeConfirmation(result) {
+      if (!confirmation.resolve) return;
+      const resolve = confirmation.resolve;
+      confirmation.resolve = null;
+      els.confirmModal.classList.add('hidden');
+      resolve(result);
+      if (confirmation.previousFocus?.focus) confirmation.previousFocus.focus();
+      confirmation.previousFocus = null;
+    }
+
+    function requestConfirmation({
+      title = '確認',
+      message = '',
+      confirmText = '実行する',
+      cancelText = '戻る',
+      tone = 'danger',
+    }) {
+      if (!els.confirmModal) return Promise.resolve(false);
+      if (confirmation.resolve) closeConfirmation(false);
+
+      confirmation.previousFocus = document.activeElement;
+      els.confirmTitle.textContent = title;
+      els.confirmMessage.textContent = message;
+      els.confirmSubmit.textContent = confirmText;
+      els.confirmCancel.textContent = cancelText;
+      els.confirmSubmit.className = tone === 'primary' ? 'primary' : 'danger';
+      els.confirmModal.classList.remove('hidden');
+      els.confirmSubmit.focus();
+
+      return new Promise((resolve) => {
+        confirmation.resolve = resolve;
+      });
     }
 
     function activeAccounts() {
@@ -1329,7 +1428,11 @@
     async function executeFeature(selected) {
       const config = collectConfig(selected);
       if (state.mode === 'live') {
-        const ok = window.confirm('この操作を実行します。よろしいですか？');
+        const ok = await requestConfirmation({
+          title: '実行前の確認',
+          message: `「${selected.title}」を実行します。選択したXアカウントで実際に操作されます。`,
+          confirmText: '実行する',
+        });
         if (!ok) return;
       }
 
@@ -1358,6 +1461,15 @@
     }
 
     async function scheduleFeature(selected) {
+      if (state.mode === 'live') {
+        const ok = await requestConfirmation({
+          title: '実行予約の確認',
+          message: `「${selected.title}」を実行モードで予約します。予約時刻になると選択したXアカウントで実際に操作されます。`,
+          confirmText: '予約を保存',
+        });
+        if (!ok) return;
+      }
+
       try {
         await apiRequest('/console/actions/schedule', {
           method: 'POST',
@@ -1408,7 +1520,7 @@
             <div class="history-meta">${escapeHtml(scheduleDetail(schedule))}</div>
             ${schedule.lastError ? `<div class="history-meta">${escapeHtml(`失敗理由: ${schedule.lastError}`)}</div>` : ''}
             <div class="schedule-actions">
-              <button type="button" data-run-now="${escapeHtml(schedule.id)}">今すぐ実行</button>
+              <button type="button" data-run-now="${escapeHtml(schedule.id)}" data-run-mode="${escapeHtml(schedule.mode)}">今すぐ実行</button>
               <button type="button" data-toggle-schedule="${escapeHtml(schedule.id)}" data-status="${escapeHtml(schedule.status)}">${schedule.status === 'paused' ? '再開' : '停止'}</button>
               <button type="button" data-load-runs="${escapeHtml(schedule.id)}">実行履歴</button>
               <button type="button" data-delete-schedule="${escapeHtml(schedule.id)}">削除</button>
@@ -1418,7 +1530,7 @@
         `).join('');
 
         list.querySelectorAll('[data-run-now]').forEach((button) => {
-          button.addEventListener('click', () => runScheduleNow(button.dataset.runNow, selected));
+          button.addEventListener('click', () => runScheduleNow(button.dataset.runNow, selected, button.dataset.runMode));
         });
         list.querySelectorAll('[data-toggle-schedule]').forEach((button) => {
           button.addEventListener('click', () => toggleSchedule(button.dataset.toggleSchedule, button.dataset.status, selected));
@@ -1504,7 +1616,16 @@
       return '';
     }
 
-    async function runScheduleNow(id, selected) {
+    async function runScheduleNow(id, selected, mode = 'dryRun') {
+      if (mode === 'live') {
+        const ok = await requestConfirmation({
+          title: '今すぐ実行',
+          message: 'この予約を実行モードで開始します。選択済みのXアカウントで実際に操作されます。',
+          confirmText: '今すぐ実行',
+        });
+        if (!ok) return;
+      }
+
       try {
         const result = await apiRequest(`/scheduled-actions/${encodeURIComponent(id)}/run-now`, { method: 'POST' });
         setStatus(
@@ -1531,7 +1652,11 @@
     }
 
     async function deleteSchedule(id, selected) {
-      const ok = window.confirm('この予約を削除しますか？');
+      const ok = await requestConfirmation({
+        title: '予約を削除',
+        message: 'この予約を削除します。削除後は元に戻せません。',
+        confirmText: '削除する',
+      });
       if (!ok) return;
       try {
         await apiRequest(`/scheduled-actions/${encodeURIComponent(id)}`, { method: 'DELETE' });
@@ -1630,7 +1755,11 @@
 
     async function retryFailedAccounts(parentOperationId, selected) {
       if (state.mode === 'live') {
-        const ok = window.confirm('失敗したアカウントだけ再実行します。よろしいですか？');
+        const ok = await requestConfirmation({
+          title: '再実行の確認',
+          message: '失敗したアカウントだけを実行モードで再実行します。',
+          confirmText: '再実行する',
+        });
         if (!ok) return;
       }
 
@@ -1739,7 +1868,11 @@
     }
 
     async function deleteAccount(accountId) {
-      const ok = window.confirm('このXアカウントを削除しますか？有効な予約は停止されます。');
+      const ok = await requestConfirmation({
+        title: 'Xアカウントを削除',
+        message: 'このXアカウントを削除します。有効な予約は停止されます。',
+        confirmText: '削除する',
+      });
       if (!ok) return;
       try {
         await apiRequest(`/accounts/${encodeURIComponent(accountId)}`, { method: 'DELETE' });
@@ -1796,6 +1929,17 @@
         els.newAccountUsername.value = '';
         els.newAccountCookie.value = '';
         els.newAccountDefault.checked = false;
+      }
+    });
+
+    els.confirmCancel.addEventListener('click', () => closeConfirmation(false));
+    els.confirmSubmit.addEventListener('click', () => closeConfirmation(true));
+    els.confirmModal.addEventListener('click', (event) => {
+      if (event.target === els.confirmModal) closeConfirmation(false);
+    });
+    document.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape' && !els.confirmModal.classList.contains('hidden')) {
+        closeConfirmation(false);
       }
     });
 
