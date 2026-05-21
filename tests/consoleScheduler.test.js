@@ -334,6 +334,7 @@ describe('console scheduler helpers', () => {
         status: 'available',
         consoleAction: action,
         supportsDryRun: true,
+        supportsSchedule: true,
       });
     }
   });
@@ -652,13 +653,13 @@ describe('console scheduler helpers', () => {
       status: 'available',
       consoleAction: 'extractVideo',
       accountRequired: false,
-      supportsSchedule: false,
+      supportsSchedule: true,
     });
     expect(getFeatureById('thread')).toMatchObject({
       status: 'available',
       consoleAction: 'unrollThread',
       accountRequired: false,
-      supportsSchedule: false,
+      supportsSchedule: true,
     });
   });
 
