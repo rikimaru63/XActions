@@ -38,6 +38,14 @@ describe('console scheduler helpers', () => {
     expect(html).toContain("active: '予約済み'");
   });
 
+  it('lets scheduled actions choose dry-run or live mode from the schedule panel', () => {
+    const html = readFileSync(new URL('../dashboard/console.html', import.meta.url), 'utf8');
+
+    expect(html).toContain('data-schedule-mode="dryRun"');
+    expect(html).toContain('data-schedule-mode="live"');
+    expect(html).toContain('state.mode = button.dataset.scheduleMode');
+  });
+
   it('parses one-time Asia/Tokyo datetime values', () => {
     const nextRunAt = calculateNextRunAt(
       { type: 'once', runAt: '2026-05-21T18:00', timezone: 'Asia/Tokyo' },

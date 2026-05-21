@@ -1265,7 +1265,17 @@
         return;
       }
 
+      const disableDryRun = !selected.supportsDryRun;
+      if (disableDryRun && state.mode === 'dryRun') state.mode = 'live';
+
       els.schedulePanel.innerHTML = `
+        <div class="field">
+          <label>実行方法</label>
+          <div class="mode">
+            <button type="button" data-schedule-mode="dryRun" class="${state.mode === 'dryRun' ? 'active' : ''}" ${disableDryRun ? 'disabled' : ''}>確認のみ</button>
+            <button type="button" data-schedule-mode="live" class="${state.mode === 'live' ? 'active' : ''}">実行</button>
+          </div>
+        </div>
         ${renderAccountPicker(selected)}
         <div class="field">
           <label for="schedule-type">予約タイプ</label>
@@ -1301,11 +1311,17 @@
           <label for="schedule-retries">失敗時の再試行</label>
           <input id="schedule-retries" type="number" min="0" max="5" value="2">
         </div>
-        <button type="button" class="secondary" id="schedule-btn" style="width:100%;">予約を保存</button>
+        <button type="button" class="${state.mode === 'live' ? 'danger' : 'secondary'}" id="schedule-btn" style="width:100%;">予約を保存</button>
         <div class="status"></div>
         <div class="schedule-list" id="schedule-list"></div>
       `;
 
+      els.schedulePanel.querySelectorAll('[data-schedule-mode]').forEach((button) => {
+        button.addEventListener('click', () => {
+          state.mode = button.dataset.scheduleMode;
+          renderSchedule(selected);
+        });
+      });
       bindAccountPicker(els.schedulePanel);
       document.getElementById('schedule-btn').addEventListener('click', () => scheduleFeature(selected));
     }
