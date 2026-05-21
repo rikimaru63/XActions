@@ -41,7 +41,7 @@ async function resolveExecutionAccounts(req, feature) {
 
   if (!requested.length) {
     const error = new Error(accounts.length
-      ? '実行アカウントを選択してください。'
+      ? '実行するXアカウントを選択してください。'
       : 'X連携が必要です。設定からXアカウントを連携してください。');
     error.statusCode = 400;
     throw error;
@@ -361,7 +361,7 @@ router.post('/actions/retry-failed', async (req, res) => {
     assertAccountSelectionLimit([...new Set(failedAccounts)]);
 
     if (!failedAccounts.length) {
-      return res.status(400).json({ error: '失敗したXアカウントが実行できる状態ではありません。' });
+      return res.status(400).json({ error: '失敗したアカウントが実行できる状態ではありません。' });
     }
 
     const mode = req.body.mode === 'live' || parentConfig.mode === 'live' || parentConfig.dryRun === false ? 'live' : 'dryRun';

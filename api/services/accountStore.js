@@ -10,6 +10,15 @@ function normalizeUsername(username = '') {
   return String(username).trim().replace(/^@/, '').replace(/[^a-zA-Z0-9_]/g, '');
 }
 
+function accountStatusLabel(status) {
+  return {
+    active: '連携済み',
+    expired: '期限切れ',
+    error: '確認エラー',
+    disabled: '停止中',
+  }[status] || status || '-';
+}
+
 function sanitizeAccount(account) {
   if (!account) return null;
   return {
@@ -46,26 +55,17 @@ function buildAccountLiveReadiness(accounts = [], target = liveReadinessAccountT
     title: ready ? '複数アカウント実行の準備完了' : `あと${remaining}件のX連携が必要`,
     detail: ready
       ? `実行可能なX連携が${activeCount}件あります。2件を選択してlive確認できます。`
-      : `実行可能なX連携は${activeCount}件です。live検証には2件必要です。`,
+      : `実行可能なX連携は${activeCount}件です。live検証には${target}件必要です。`,
     nextAction: ready
       ? '機能を選び、2件のX連携で実行または予約できます。'
       : 'X連携を追加し、確認で連携済みにしてください。',
-    reasons: ready ? [] : ['実行可能なX連携が2件必要です。'],
+    reasons: ready ? [] : [`実行可能なX連携が${target}件必要です。`],
   };
-}
-
-function accountStatusLabel(status) {
-  return {
-    active: '連携済み',
-    expired: '期限切れ',
-    error: '確認エラー',
-    disabled: '停止中',
-  }[status] || status || '-';
 }
 
 function isSessionExpiredError(error) {
   const message = String(error?.message || error || '').toLowerCase();
-  return /session expired|invalid session|authentication failed|login required|please reconnect|ログイン状態|ログインでき|期限切れ/.test(message);
+  return /session expired|invalid session|authentication failed|login required|please reconnect|ログイン状態|ログインしてください|期限切れ/.test(message);
 }
 
 function shouldPauseSchedulesForAccountStatus(status) {
@@ -75,10 +75,10 @@ function shouldPauseSchedulesForAccountStatus(status) {
 function accountPauseMessage(status) {
   return {
     expired: 'Xのログイン状態が切れました。連携情報を更新してください。',
-    error: 'Xアカウントの確認でエラーが発生したため予約を停止しました。',
+    error: 'Xアカウントの確認でエラーが発生したため、予約を停止しました。',
     disabled: 'Xアカウントを停止したため予約を停止しました。',
-    deleted: 'アカウント削除のため停止しました。',
-  }[status] || 'Xアカウントが実行できない状態のため予約を停止しました。';
+    deleted: 'アカウント削除のため、予約を停止しました。',
+  }[status] || 'Xアカウントが実行できない状態のため、予約を停止しました。';
 }
 
 async function pauseActiveSchedulesForAccount(userId, accountId, message) {
