@@ -82,6 +82,21 @@ describe('console scheduler helpers', () => {
     expect(html).toContain('await loadScheduleRuns(id);');
   });
 
+  it('shows the next action for failed runs and unavailable accounts', () => {
+    const html = readFileSync(new URL('../dashboard/console.html', import.meta.url), 'utf8');
+
+    expect(html).toContain('function accountGuidance');
+    expect(html).toContain('function nextActionText');
+    expect(html).toContain('function detailWithGuidance');
+    expect(html).toContain('次の操作:');
+    expect(html).toContain('連携情報を更新して確認してください。');
+    expect(html).toContain('前の実行が終わってから再実行してください。');
+    expect(html).toContain('設定を見直してから再実行してください。');
+    expect(html).toContain('detailWithGuidance(schedule.lastError, schedule.account)');
+    expect(html).toContain('detailWithGuidance(operation.error, operation.account)');
+    expect(html).toContain('detailWithGuidance(child.error, child.account)');
+  });
+
   it('parses one-time Asia/Tokyo datetime values', () => {
     const nextRunAt = calculateNextRunAt(
       { type: 'once', runAt: '2026-05-21T18:00', timezone: 'Asia/Tokyo' },

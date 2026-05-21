@@ -1122,6 +1122,32 @@
       return parts.join(' / ') || 'まだ実行履歴はありません';
     }
 
+    function accountGuidance(account) {
+      if (!account) return '';
+      if (account.status === 'active') return '';
+      if (account.status === 'disabled') return '使う場合は再開してください。';
+      return '連携情報を更新して確認してください。';
+    }
+
+    function nextActionText(message = '', account = null) {
+      const text = `${message || ''} ${account?.status || ''} ${account?.error || ''}`.toLowerCase();
+      if (/session|auth|cookie|ログイン|連携情報|期限切れ|読み取れ/.test(text)) {
+        return '連携情報を更新して確認してください。';
+      }
+      if (/同じxアカウント|続いている|lock/.test(text)) {
+        return '前の実行が終わってから再実行してください。';
+      }
+      if (/入力|指定|正しく|必要|required|invalid/.test(text)) {
+        return '設定を見直してから再実行してください。';
+      }
+      return '設定と履歴を確認してから再実行してください。';
+    }
+
+    function detailWithGuidance(message, account = null) {
+      if (!message) return '';
+      return `${message} / 次の操作: ${nextActionText(message, account)}`;
+    }
+
     function renderAccountManagement() {
       const addForm = `
         <form class="account-form" id="account-manage-form">
@@ -1152,6 +1178,7 @@
               <span class="badge ${accountStatusClass(account.status)}">${escapeHtml(account.statusLabel)}</span>
             </div>
             <div class="history-meta">${escapeHtml(account.isDefault ? 'デフォルト / ' : '')}${escapeHtml(accountActivityText(account))}</div>
+            ${accountGuidance(account) ? `<div class="history-meta">${escapeHtml(`次の操作: ${accountGuidance(account)}`)}</div>` : ''}
             <div class="account-actions">
               <button type="button" data-account-default="${escapeHtml(account.id)}" ${account.isDefault ? 'disabled' : ''}>デフォルト</button>
               <button type="button" data-account-verify="${escapeHtml(account.id)}">確認</button>
@@ -1561,7 +1588,7 @@
               <span class="badge ${statusBadgeClass(schedule.status)}">${escapeHtml(scheduleStatusLabel(schedule.status))}</span>
             </div>
             <div class="history-meta">${escapeHtml(scheduleDetail(schedule))}</div>
-            ${schedule.lastError ? `<div class="history-meta">${escapeHtml(`失敗理由: ${schedule.lastError}`)}</div>` : ''}
+            ${schedule.lastError ? `<div class="history-meta">${escapeHtml(`失敗理由: ${detailWithGuidance(schedule.lastError, schedule.account)}`)}</div>` : ''}
             <div class="schedule-actions">
               <button type="button" data-run-now="${escapeHtml(schedule.id)}" data-run-mode="${escapeHtml(schedule.mode)}">今すぐ実行</button>
               <button type="button" data-toggle-schedule="${escapeHtml(schedule.id)}" data-status="${escapeHtml(schedule.status)}">${schedule.status === 'paused' ? '再開' : '停止'}</button>
@@ -1632,7 +1659,7 @@
                 </div>
                 <span class="badge ${statusBadgeClass(runStatus)}">${escapeHtml(run.operationType || '予約')}</span>
               </div>
-              <div class="history-meta">${escapeHtml(run.error || runResultDetail(run) || runTimeDetail(run))}</div>
+              <div class="history-meta">${escapeHtml(run.error ? detailWithGuidance(run.error, run.account) : (runResultDetail(run) || runTimeDetail(run)))}</div>
             </div>
           `;
         }).join('');
@@ -1761,7 +1788,7 @@
     }
 
     function historyDetail(operation) {
-      if (operation.error) return operation.error;
+      if (operation.error) return detailWithGuidance(operation.error, operation.account);
       if (operation.result?.batch) {
         return `完了 ${operation.result.completed || 0} / 失敗 ${operation.result.failed || 0} / 全体 ${operation.result.total || 0}`;
       }
@@ -1774,7 +1801,7 @@
         <div class="history-meta">
           ${operation.childOperations.map((child) => {
             const account = child.account?.username ? `@${child.account.username}` : 'アカウント未指定';
-            const error = child.error ? ` / ${child.error}` : '';
+            const error = child.error ? ` / ${detailWithGuidance(child.error, child.account)}` : '';
             return escapeHtml(`${account}: ${jaStatus(child.status)}${error}`);
           }).join('<br>')}
         </div>
