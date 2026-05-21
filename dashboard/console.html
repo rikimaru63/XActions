@@ -157,6 +157,35 @@
       gap: 12px;
     }
 
+    .readiness-card {
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      padding: 10px 12px;
+      background: var(--surface);
+      display: grid;
+      gap: 5px;
+      font-size: 12px;
+      line-height: 1.5;
+    }
+
+    .readiness-card.ready {
+      border-color: rgba(0, 186, 124, 0.5);
+      background: rgba(0, 186, 124, 0.06);
+    }
+
+    .readiness-card.pending {
+      border-color: rgba(255, 184, 77, 0.45);
+      background: rgba(255, 184, 77, 0.06);
+    }
+
+    .readiness-card strong {
+      font-size: 13px;
+    }
+
+    .readiness-card span {
+      color: var(--muted);
+    }
+
     .account-card {
       border: 1px solid var(--line);
       border-radius: var(--radius);
@@ -1001,6 +1030,36 @@
       return state.accounts.filter((account) => account.status === 'active');
     }
 
+    function liveReadiness() {
+      const activeCount = activeAccounts().length;
+      const remaining = Math.max(MAX_ACCOUNT_SELECTION - activeCount, 0);
+      const ready = remaining === 0;
+
+      return {
+        ready,
+        activeCount,
+        totalCount: state.accounts.length,
+        title: ready ? '複数アカウント実行の準備完了' : `あと${remaining}件のX連携が必要`,
+        detail: ready
+          ? `実行可能なX連携が${activeCount}件あります。2件を選択してlive確認できます。`
+          : `実行可能なX連携は${activeCount}件です。live検証には2件必要です。`,
+        nextAction: ready
+          ? '機能を選び、2件のX連携で実行または予約できます。'
+          : 'X連携を追加し、確認で連携済みにしてください。',
+      };
+    }
+
+    function liveReadinessCard(context = '') {
+      const readiness = liveReadiness();
+      return `
+        <div class="readiness-card ${readiness.ready ? 'ready' : 'pending'}" data-live-readiness="${escapeHtml(context)}">
+          <strong>${escapeHtml(readiness.title)}</strong>
+          <span>${escapeHtml(readiness.detail)}</span>
+          <span>${escapeHtml(`次の操作: ${readiness.nextAction}`)}</span>
+        </div>
+      `;
+    }
+
     function limitAccountSelection(ids) {
       return [...new Set(ids.filter(Boolean))].slice(0, MAX_ACCOUNT_SELECTION);
     }
@@ -1084,14 +1143,16 @@
       if (!state.accounts.length) {
         els.accountName.textContent = '未連携';
         els.accountState.innerHTML = '<a href="/classic-dashboard">旧画面でX連携を設定</a>';
-        els.accountList.innerHTML = '';
+        els.accountList.innerHTML = liveReadinessCard('sidebar');
         return;
       }
 
       const defaultAccount = state.accounts.find((account) => account.isDefault) || state.accounts[0];
       els.accountName.textContent = `@${defaultAccount.username}`;
       els.accountState.textContent = `${state.accounts.length}件 / ${activeAccounts().length}件が実行可能`;
-      els.accountList.innerHTML = state.accounts.map((account) => `
+      els.accountList.innerHTML = `
+        ${liveReadinessCard('sidebar')}
+        ${state.accounts.map((account) => `
         <label class="account-item">
           <input type="checkbox" data-account-sidebar-choice value="${escapeHtml(account.id)}" ${state.selectedAccountIds.includes(account.id) ? 'checked' : ''} ${account.status !== 'active' ? 'disabled' : ''} ${account.status !== 'active' ? 'data-disabled-by-status="true"' : ''}>
           <span class="account-meta">
@@ -1099,7 +1160,8 @@
             <span>${escapeHtml(account.isDefault ? 'デフォルト' : account.statusLabel)}</span>
           </span>
         </label>
-      `).join('');
+      `).join('')}
+      `;
       updateAccountChoiceLocks(els.accountList, '[data-account-sidebar-choice]');
 
       els.accountList.querySelectorAll('[data-account-sidebar-choice]').forEach((input) => {
@@ -1196,6 +1258,7 @@
 
       els.settingsPanel.innerHTML = `
         <div class="account-management">
+          ${liveReadinessCard('management')}
           ${addForm}
           <div class="status"></div>
           <div class="account-manage-list">${accountList}</div>

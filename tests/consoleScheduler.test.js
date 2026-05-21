@@ -98,6 +98,16 @@ describe('console scheduler helpers', () => {
     expect(html).not.toContain('href="/dashboard"');
   });
 
+  it('shows live readiness guidance for the final two-account verification', () => {
+    const html = readFileSync(new URL('../dashboard/console.html', import.meta.url), 'utf8');
+
+    expect(html).toContain('function liveReadiness()');
+    expect(html).toContain('data-live-readiness');
+    expect(html).toContain('複数アカウント実行の準備完了');
+    expect(html).toContain('live検証には2件必要です');
+    expect(html).toContain('2件のX連携で実行または予約できます');
+  });
+
   it('parses live readonly account selectors consistently', () => {
     const env = {
       XACTIONS_LIVE_ACCOUNT_IDS: 'acc_1, acc_2, acc_1',

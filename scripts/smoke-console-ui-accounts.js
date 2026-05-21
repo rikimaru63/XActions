@@ -245,6 +245,7 @@ try {
   const sidebar = await page.evaluate(() => ({
     accountName: document.querySelector('#account-name')?.textContent?.trim(),
     accountState: document.querySelector('#account-state')?.textContent?.trim(),
+    readiness: document.querySelector('#account-list [data-live-readiness]')?.textContent?.replace(/\s+/g, ' ').trim(),
     items: [...document.querySelectorAll('#account-list label.account-item')].map((item) => {
       const input = item.querySelector('[data-account-sidebar-choice]');
       return {
@@ -287,6 +288,7 @@ try {
 
   const management = await page.evaluate(() => ({
     detailTitle: document.querySelector('#detail-title')?.textContent?.trim(),
+    readiness: document.querySelector('#settings-panel [data-live-readiness]')?.textContent?.replace(/\s+/g, ' ').trim(),
     cards: [...document.querySelectorAll('#settings-panel [data-account-card]')].map((card) => ({
       accountId: card.dataset.accountCard,
       badge: card.querySelector('.badge')?.textContent?.trim(),
@@ -333,6 +335,8 @@ try {
   const ok = Object.values(accountFormChecks).every(Boolean)
     && sidebar.accountName === `@${defaultAccount.username}`
     && sidebar.accountState === '3件 / 2件が実行可能'
+    && sidebar.readiness?.includes('複数アカウント実行の準備完了')
+    && sidebar.readiness?.includes('2件を選択してlive確認できます')
     && defaultSidebar
     && !defaultSidebar.disabled
     && defaultSidebar.text.includes('デフォルト')
@@ -344,6 +348,7 @@ try {
     && expiredSidebar.disabledByStatus
     && expiredAccountGuidance.sidebarShowsExpired
     && management.detailTitle === 'X連携'
+    && management.readiness?.includes('2件のX連携で実行または予約できます')
     && activeCards.every((card) => card?.badge === '連携済み')
     && expiredCard?.badge === '期限切れ'
     && Object.values(expiredAccountGuidance).every(Boolean)
