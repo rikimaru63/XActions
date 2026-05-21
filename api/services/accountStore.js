@@ -119,6 +119,12 @@ async function getAccountForUser(userId, accountId) {
 
 async function getDecryptedAccountCookie(userId, accountId) {
   const account = await getAccountForUser(userId, accountId);
+  if (accountId && !account) return null;
+
+  if (account && account.status !== 'active') {
+    return null;
+  }
+
   if (account?.encryptedCookie) {
     const cookie = decrypt(account.encryptedCookie);
     if (cookie) {
@@ -128,8 +134,22 @@ async function getDecryptedAccountCookie(userId, accountId) {
       }).catch(() => {});
       return cookie;
     }
+
+    await prisma.xAccount.update({
+      where: { id: account.id },
+      data: {
+        status: 'error',
+        error: '保存済み cookie を復号できませんでした。',
+      },
+    }).catch(() => {});
+
+    return null;
   }
 
+  if (accountId || account) return null;
+
+  // Compatibility fallback for users that still only have User.sessionCookie
+  // and have not been migrated into XAccount yet.
   const user = await prisma.user.findUnique({
     where: { id: userId },
     select: { sessionCookie: true },

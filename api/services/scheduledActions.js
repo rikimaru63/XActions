@@ -8,6 +8,7 @@ import {
 } from './consoleActions.js';
 import {
   getAccountForUser,
+  getDecryptedAccountCookie,
   listAccountsForUser,
   sanitizeAccount,
 } from './accountStore.js';
@@ -65,6 +66,32 @@ function validateFeatureForSchedule(feature, mode) {
   if (mode === 'dryRun' && !feature.supportsDryRun) {
     throw new Error('この機能は確認のみには対応していません。実行を選んでください。');
   }
+}
+
+async function skipScheduledAction(schedule, scheduledFor, message, options = {}) {
+  const run = await prisma.scheduledActionRun.create({
+    data: {
+      scheduledActionId: schedule.id,
+      status: 'skipped',
+      scheduledFor,
+      finishedAt: new Date(),
+      error: message,
+    },
+  });
+
+  if (options.advanceSchedule !== false) {
+    await prisma.scheduledAction.update({
+      where: { id: schedule.id },
+      data: {
+        status: 'paused',
+        lockedAt: null,
+        lockedBy: null,
+        lastError: message,
+      },
+    }).catch(() => {});
+  }
+
+  return { runId: run.id, operationId: null, skipped: true, error: message };
 }
 
 async function resolveAccountIds(user, feature, body) {
@@ -152,6 +179,28 @@ async function enqueueScheduledAction(schedule, queueJobFn, options = {}) {
   const config = decryptScheduledConfig(fullSchedule);
   const payload = createActionPayload(feature, config, fullSchedule.mode, fullSchedule.user);
   const scheduledFor = options.scheduledFor || fullSchedule.nextRunAt || new Date();
+
+  if (fullSchedule.accountId) {
+    if (!fullSchedule.account || fullSchedule.account.status !== 'active') {
+      const username = fullSchedule.account?.username ? `@${fullSchedule.account.username}` : '選択したXアカウント';
+      return skipScheduledAction(
+        fullSchedule,
+        scheduledFor,
+        `${username} は実行できる状態ではありません。`,
+        options
+      );
+    }
+
+    const cookie = await getDecryptedAccountCookie(fullSchedule.userId, fullSchedule.accountId);
+    if (!cookie) {
+      return skipScheduledAction(
+        fullSchedule,
+        scheduledFor,
+        `@${fullSchedule.account.username} の session cookie を取得できませんでした。`,
+        options
+      );
+    }
+  }
 
   const run = await prisma.scheduledActionRun.create({
     data: {

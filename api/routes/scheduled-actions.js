@@ -166,7 +166,7 @@ router.post('/:id/run-now', async (req, res) => {
       advanceSchedule: false,
     });
 
-    res.json({ status: 'queued', ...result });
+    res.json({ status: result.skipped ? 'skipped' : 'queued', ...result });
   } catch (error) {
     console.error('Run scheduled action error:', error);
     res.status(400).json({ error: error.message || '予約を実行できませんでした。' });

@@ -294,12 +294,12 @@ async function resolveJobConfig(job) {
       ? await getDecryptedAccountCookie(job.data.userId, job.data.accountId).catch(() => null)
       : null;
 
-    if (accountCookie) {
-      return {
-        ...config,
-        sessionCookie: accountCookie,
-      };
-    }
+    if (!accountCookie) throw new Error('Xアカウントの session cookie を取得できませんでした。');
+
+    return {
+      ...config,
+      sessionCookie: accountCookie,
+    };
   }
 
   if (job.data.authMethod === 'session' || config.sessionCookie) {
