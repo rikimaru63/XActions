@@ -45,6 +45,12 @@ function delay(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+function pushUnique(target, values) {
+  for (const value of values) {
+    if (value && !target.includes(value)) target.push(value);
+  }
+}
+
 async function waitFor(label, fn, options = {}) {
   const timeoutMs = options.timeoutMs || 60000;
   const intervalMs = options.intervalMs || 1000;
@@ -469,6 +475,94 @@ async function pollScheduledRuns(runIds) {
   return result.runs;
 }
 
+async function exerciseAutomaticDueScheduler(token, accountIds) {
+  const dueRunAt = new Date(Date.now() - 5000).toISOString();
+  const scheduleResponse = await requestJson('/api/console/actions/schedule', {
+    method: 'POST',
+    token,
+    body: {
+      featureId: 'postTweet',
+      mode: 'dryRun',
+      name: `Console automatic due smoke ${smokeId}`,
+      accountIds,
+      maxRetries: 0,
+      config: {
+        text: `[${smokeId}] automatic due scheduler dry run`,
+      },
+      schedule: {
+        type: 'once',
+        runAt: dueRunAt,
+        timezone: 'Asia/Tokyo',
+      },
+    },
+  });
+
+  const schedules = scheduleResponse.schedules || [];
+  assert(schedules.length === accountIds.length, `Expected ${accountIds.length} due schedules, got ${schedules.length}.`);
+  assert(
+    accountIds.every((accountId) => schedules.some((schedule) => schedule.accountId === accountId)),
+    'Automatic due schedules were not created for every account.'
+  );
+
+  const scheduleIds = schedules.map((schedule) => schedule.id);
+  pushUnique(created.scheduleIds, scheduleIds);
+
+  const result = await waitFor('automatic due scheduler completion', async () => {
+    const rows = await prisma.scheduledAction.findMany({
+      where: { id: { in: scheduleIds } },
+      include: {
+        runs: {
+          include: {
+            operation: {
+              select: {
+                id: true,
+                accountId: true,
+                status: true,
+                error: true,
+              },
+            },
+          },
+          orderBy: { createdAt: 'asc' },
+        },
+      },
+      orderBy: { createdAt: 'asc' },
+    });
+
+    const runs = rows.flatMap((schedule) => schedule.runs);
+    const terminal = rows.length === scheduleIds.length
+      && rows.every((schedule) => schedule.status === 'completed' && schedule.nextRunAt === null)
+      && runs.length === scheduleIds.length
+      && runs.every((run) => run.status === 'completed' && run.operation?.status === 'completed');
+
+    return { ok: terminal, schedules: rows, runs };
+  }, { timeoutMs: 90000, intervalMs: 1500 });
+
+  const runIds = result.runs.map((run) => run.id);
+  const operationIds = result.runs.map((run) => run.operationId).filter(Boolean);
+  pushUnique(created.runIds, runIds);
+  pushUnique(created.operationIds, operationIds);
+
+  return {
+    dueRunAt,
+    schedules: result.schedules.map((schedule) => ({
+      id: schedule.id,
+      accountId: schedule.accountId,
+      status: schedule.status,
+      nextRunAt: schedule.nextRunAt,
+      lastRunAt: schedule.lastRunAt,
+    })),
+    runs: result.runs.map((run) => ({
+      id: run.id,
+      scheduleId: run.scheduledActionId,
+      operationId: run.operationId,
+      accountId: run.operation?.accountId,
+      status: run.status,
+      operationStatus: run.operation?.status,
+    })),
+    operationIds,
+  };
+}
+
 function findSensitiveJobDataLeaks(value, path = 'job.data') {
   const leaks = [];
   if (value === null || typeof value === 'undefined') return leaks;
@@ -619,6 +713,8 @@ async function main() {
     };
   }, { timeoutMs: 45000, intervalMs: 1000 });
 
+  const automaticDue = await exerciseAutomaticDueScheduler(token, accountIds);
+
   const runAt = new Date(Date.now() + 60 * 60 * 1000).toISOString();
   const scheduleResponse = await requestJson('/api/console/actions/schedule', {
     method: 'POST',
@@ -646,14 +742,15 @@ async function main() {
     accountIds.every((accountId) => schedules.some((schedule) => schedule.accountId === accountId)),
     'Schedules were not created for both accounts.'
   );
-  created.scheduleIds.push(...schedules.map((schedule) => schedule.id));
+  const manualScheduleIds = schedules.map((schedule) => schedule.id);
+  pushUnique(created.scheduleIds, manualScheduleIds);
 
   const scheduleList = await requestJson(
     `/api/scheduled-actions?featureId=postTweet&accountIds=${encodeURIComponent(accountIds.join(','))}&limit=20`,
     { token }
   );
   assert(
-    created.scheduleIds.every((scheduleId) => scheduleList.schedules.some((schedule) => schedule.id === scheduleId)),
+    manualScheduleIds.every((scheduleId) => scheduleList.schedules.some((schedule) => schedule.id === scheduleId)),
     'Created schedules are not visible from the account-filtered schedule list.'
   );
 
@@ -696,8 +793,12 @@ async function main() {
     runNowResponses.every((runNow) => historyIds.has(runNow.operationId)),
     'Scheduled run operations were not visible in filtered history.'
   );
+  assert(
+    automaticDue.operationIds.every((operationId) => historyIds.has(operationId)),
+    'Automatic due scheduler operations were not visible in filtered history.'
+  );
   const accountDeletes = await exerciseAccountDeleteApi(token, accounts);
-  const deletedAccountSchedules = await assertDeletedAccountSchedulesPaused(created.scheduleIds);
+  const deletedAccountSchedules = await assertDeletedAccountSchedulesPaused(manualScheduleIds);
 
   const summary = {
     ok: true,
@@ -719,6 +820,7 @@ async function main() {
         status: operation.status,
       })),
     },
+    automaticDue,
     schedules: schedules.map((schedule) => ({
       id: schedule.id,
       accountId: schedule.accountId,
