@@ -78,6 +78,28 @@ docker exec \
   "$api" npm run smoke:console-live-readonly
 ```
 
+ユーザー名でも指定できます。
+
+```bash
+docker exec \
+  -e XACTIONS_BASE_URL='https://xactions.logence.co.jp' \
+  -e XACTIONS_SMOKE_USERNAME='test_account_20260521092255' \
+  -e XACTIONS_LIVE_ACCOUNT_USERNAMES='account_a,account_b' \
+  -e XACTIONS_LIVE_PROFILE_TARGET='x' \
+  "$api" npm run smoke:console-live-readonly
+```
+
+登録済みの active アカウントからデフォルト優先で2件を使う場合は、明示フラグを付けます。
+
+```bash
+docker exec \
+  -e XACTIONS_BASE_URL='https://xactions.logence.co.jp' \
+  -e XACTIONS_SMOKE_USERNAME='test_account_20260521092255' \
+  -e XACTIONS_LIVE_USE_EXISTING_ACCOUNTS='true' \
+  -e XACTIONS_LIVE_PROFILE_TARGET='x' \
+  "$api" npm run smoke:console-live-readonly
+```
+
 成功時はJSONで `ok: true` が出ます。重要な確認点は次の通りです。
 
 - `accounts` が2件あり、両方 `status: "active"`

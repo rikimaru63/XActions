@@ -18,9 +18,20 @@ const liveCookies = [
   process.env.XACTIONS_LIVE_ACCOUNT_B_COOKIE,
 ].map((value) => String(value || '').trim());
 
+function envList(name) {
+  return String(process.env[name] || '')
+    .split(',')
+    .map((value) => String(value || '').trim())
+    .filter(Boolean);
+}
+
+function envBool(name) {
+  return ['1', 'true', 'yes', 'on'].includes(String(process.env[name] || '').trim().toLowerCase());
+}
+
 function liveAccountIdsFromEnv() {
   const ids = [
-    ...String(process.env.XACTIONS_LIVE_ACCOUNT_IDS || '').split(','),
+    ...envList('XACTIONS_LIVE_ACCOUNT_IDS'),
     process.env.XACTIONS_LIVE_ACCOUNT_A_ID,
     process.env.XACTIONS_LIVE_ACCOUNT_B_ID,
   ]
@@ -28,6 +39,24 @@ function liveAccountIdsFromEnv() {
     .filter(Boolean);
 
   return [...new Set(ids)];
+}
+
+function liveAccountUsernamesFromEnv() {
+  const usernames = [
+    ...envList('XACTIONS_LIVE_ACCOUNT_USERNAMES'),
+    process.env.XACTIONS_LIVE_ACCOUNT_A_USERNAME,
+    process.env.XACTIONS_LIVE_ACCOUNT_B_USERNAME,
+  ]
+    .map((value) => String(value || '').replace(/^@/, '').trim().toLowerCase())
+    .filter(Boolean);
+
+  return [...new Set(usernames)];
+}
+
+function shouldUseExistingAccounts() {
+  return liveAccountIdsFromEnv().length > 0
+    || liveAccountUsernamesFromEnv().length > 0
+    || envBool('XACTIONS_LIVE_USE_EXISTING_ACCOUNTS');
 }
 
 const created = {
@@ -192,7 +221,7 @@ async function cleanupSmokeRows(userId, options = {}) {
 async function createCookieBackedAccounts(token) {
   assert(
     liveCookies.every(Boolean),
-    'Set XACTIONS_LIVE_ACCOUNT_A_COOKIE and XACTIONS_LIVE_ACCOUNT_B_COOKIE, or set exactly two existing accounts with XACTIONS_LIVE_ACCOUNT_IDS.'
+    'Set XACTIONS_LIVE_ACCOUNT_A_COOKIE and XACTIONS_LIVE_ACCOUNT_B_COOKIE, or use existing accounts with XACTIONS_LIVE_ACCOUNT_IDS, XACTIONS_LIVE_ACCOUNT_USERNAMES, or XACTIONS_LIVE_USE_EXISTING_ACCOUNTS=true.'
   );
   assert(liveCookies[0] !== liveCookies[1], 'Use two different X session cookies for live multi-account smoke.');
   assert(profileTarget, 'Set XACTIONS_LIVE_PROFILE_TARGET or use the default target.');
@@ -224,41 +253,84 @@ async function createCookieBackedAccounts(token) {
 
 async function resolveExistingAccounts(user) {
   const accountIds = liveAccountIdsFromEnv();
-  assert(
-    accountIds.length === 2,
-    `Set exactly two existing XAccount IDs. Received ${accountIds.length}. Use XACTIONS_LIVE_ACCOUNT_IDS="id1,id2" or XACTIONS_LIVE_ACCOUNT_A_ID / XACTIONS_LIVE_ACCOUNT_B_ID.`
-  );
+  const usernames = liveAccountUsernamesFromEnv();
+  const useFirstActive = envBool('XACTIONS_LIVE_USE_EXISTING_ACCOUNTS');
+  const selectorCount = [accountIds.length > 0, usernames.length > 0, useFirstActive].filter(Boolean).length;
+
+  assert(selectorCount === 1, 'Use exactly one existing-account selector: XACTIONS_LIVE_ACCOUNT_IDS, XACTIONS_LIVE_ACCOUNT_USERNAMES, or XACTIONS_LIVE_USE_EXISTING_ACCOUNTS=true.');
   assert(profileTarget, 'Set XACTIONS_LIVE_PROFILE_TARGET or use the default target.');
 
-  const accounts = await prisma.xAccount.findMany({
-    where: {
-      userId: user.id,
-      id: { in: accountIds },
-    },
-    select: {
-      id: true,
-      username: true,
-      status: true,
-      lastVerifiedAt: true,
-    },
-  });
-  const byId = new Map(accounts.map((account) => [account.id, account]));
-  const orderedAccounts = accountIds.map((id) => byId.get(id));
-  const missingIds = accountIds.filter((id, index) => !orderedAccounts[index]);
-  assert(!missingIds.length, `Existing XAccount IDs were not found for ${smokeUsername}: ${missingIds.join(', ')}`);
+  const select = {
+    id: true,
+    username: true,
+    status: true,
+    lastVerifiedAt: true,
+  };
+  let source = 'existing-accounts';
+  let orderedAccounts = [];
+
+  if (accountIds.length > 0) {
+    assert(
+      accountIds.length === 2,
+      `Set exactly two existing XAccount IDs. Received ${accountIds.length}. Use XACTIONS_LIVE_ACCOUNT_IDS="id1,id2" or XACTIONS_LIVE_ACCOUNT_A_ID / XACTIONS_LIVE_ACCOUNT_B_ID.`
+    );
+
+    const accounts = await prisma.xAccount.findMany({
+      where: {
+        userId: user.id,
+        id: { in: accountIds },
+      },
+      select,
+    });
+    const byId = new Map(accounts.map((account) => [account.id, account]));
+    orderedAccounts = accountIds.map((id) => byId.get(id));
+    const missingIds = accountIds.filter((id, index) => !orderedAccounts[index]);
+    assert(!missingIds.length, `Existing XAccount IDs were not found for ${smokeUsername}: ${missingIds.join(', ')}`);
+    source = 'existing-account-ids';
+  } else if (usernames.length > 0) {
+    assert(
+      usernames.length === 2,
+      `Set exactly two existing XAccount usernames. Received ${usernames.length}. Use XACTIONS_LIVE_ACCOUNT_USERNAMES="account_a,account_b" or XACTIONS_LIVE_ACCOUNT_A_USERNAME / XACTIONS_LIVE_ACCOUNT_B_USERNAME.`
+    );
+
+    const accounts = await prisma.xAccount.findMany({
+      where: { userId: user.id },
+      select,
+    });
+    const byUsername = new Map(accounts.map((account) => [String(account.username || '').toLowerCase(), account]));
+    orderedAccounts = usernames.map((username) => byUsername.get(username));
+    const missingUsernames = usernames.filter((username, index) => !orderedAccounts[index]);
+    assert(!missingUsernames.length, `Existing XAccount usernames were not found for ${smokeUsername}: ${missingUsernames.join(', ')}`);
+    source = 'existing-account-usernames';
+  } else {
+    orderedAccounts = await prisma.xAccount.findMany({
+      where: {
+        userId: user.id,
+        status: 'active',
+      },
+      select,
+      orderBy: [
+        { isDefault: 'desc' },
+        { updatedAt: 'desc' },
+      ],
+      take: 2,
+    });
+    assert(orderedAccounts.length === 2, `XACTIONS_LIVE_USE_EXISTING_ACCOUNTS=true requires at least two active XAccounts. Found ${orderedAccounts.length}.`);
+    source = 'existing-active-accounts';
+  }
 
   const unavailable = orderedAccounts.filter((account) => account.status !== 'active');
   assert(!unavailable.length, `Existing XAccounts must be active: ${unavailable.map((account) => account.id).join(', ')}`);
 
   return {
-    source: 'existing-accounts',
+    source,
     cleanupAccounts: false,
     accounts: orderedAccounts,
   };
 }
 
 async function resolveLiveAccounts(user, token) {
-  if (liveAccountIdsFromEnv().length > 0) {
+  if (shouldUseExistingAccounts()) {
     return resolveExistingAccounts(user);
   }
   return createCookieBackedAccounts(token);
