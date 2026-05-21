@@ -226,6 +226,54 @@ describe('console scheduler helpers', () => {
     });
   });
 
+  it('connects posting actions without storing full post text in operation config', () => {
+    for (const id of ['postTweet', 'postThread', 'createPoll']) {
+      expect(getFeatureById(id)).toMatchObject({
+        status: 'available',
+        consoleAction: id,
+        supportsDryRun: true,
+        supportsSchedule: true,
+      });
+    }
+
+    const tweet = createActionPayload(
+      getFeatureById('postTweet'),
+      { text: '公開本文'.repeat(30), replyTo: 'https://x.com/a/status/1' },
+      'dryRun'
+    );
+    expect(tweet.operationType).toBe('postTweet');
+    expect(tweet.operationConfig.textPreview).toBeTruthy();
+    expect(tweet.operationConfig.text).toBeUndefined();
+    expect(tweet.operationConfig.hasReplyTo).toBe(true);
+    expect(tweet.jobConfig.text).toContain('公開本文');
+
+    const thread = createActionPayload(
+      getFeatureById('postThread'),
+      { tweets: '1つ目\n---\n2つ目' },
+      'dryRun'
+    );
+    expect(thread.operationConfig).toMatchObject({
+      tweetCount: 2,
+      dryRun: true,
+    });
+    expect(thread.operationConfig.tweets).toBeUndefined();
+    expect(thread.jobConfig.tweets).toEqual(['1つ目', '2つ目']);
+
+    const poll = createActionPayload(
+      getFeatureById('createPoll'),
+      { question: 'どちらですか？', options: 'A\nB', durationMinutes: 60 },
+      'dryRun'
+    );
+    expect(poll.operationConfig).toMatchObject({
+      questionPreview: 'どちらですか？',
+      optionCount: 2,
+      durationMinutes: 60,
+      dryRun: true,
+    });
+    expect(poll.operationConfig.options).toBeUndefined();
+    expect(poll.jobConfig.options).toEqual(['A', 'B']);
+  });
+
   it('maps schedule retry settings to queue attempts', () => {
     expect(normalizeScheduleMaxRetries(undefined)).toBe(2);
     expect(normalizeScheduleMaxRetries(0)).toBe(0);

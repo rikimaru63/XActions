@@ -16,6 +16,11 @@ import { autoLikeBrowser } from './operations/puppeteer/autoLike.js';
 import { followEngagersBrowser } from './operations/puppeteer/followEngagers.js';
 import { keywordFollowBrowser } from './operations/puppeteer/keywordFollow.js';
 import { autoCommentBrowser } from './operations/puppeteer/autoComment.js';
+import {
+  createPollBrowser,
+  postThreadBrowser,
+  postTweetBrowser,
+} from './operations/puppeteer/posting.js';
 import { targetEngageBrowser } from './operations/puppeteer/targetEngage.js';
 import browserAutomation, {
   scrapeProfile,
@@ -536,6 +541,34 @@ operationsQueue.process('getConversations', 1, async (job) => {
   } finally {
     await page.close();
   }
+});
+
+// Process jobs - posting actions
+operationsQueue.process('postTweet', 1, async (job) => {
+  console.log(`🔄 Processing job ${job.id}: postTweet`);
+
+  return withAccountExecutionLock(operationsQueue.client, job, async () => {
+    const config = await resolveJobConfig(job);
+    return postTweetBrowser(job.data.userId, config);
+  });
+});
+
+operationsQueue.process('postThread', 1, async (job) => {
+  console.log(`🔄 Processing job ${job.id}: postThread`);
+
+  return withAccountExecutionLock(operationsQueue.client, job, async () => {
+    const config = await resolveJobConfig(job);
+    return postThreadBrowser(job.data.userId, config);
+  });
+});
+
+operationsQueue.process('createPoll', 1, async (job) => {
+  console.log(`🔄 Processing job ${job.id}: createPoll`);
+
+  return withAccountExecutionLock(operationsQueue.client, job, async () => {
+    const config = await resolveJobConfig(job);
+    return createPollBrowser(job.data.userId, config);
+  });
 });
 
 // Process jobs - explicit target actions (like latest posts, follow, DM)
