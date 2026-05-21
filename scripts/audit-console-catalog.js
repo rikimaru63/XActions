@@ -254,6 +254,7 @@ const localeAuditFiles = [
   '../api/services/accountStore.js',
   '../api/services/scheduledActions.js',
   '../api/services/scheduleUtils.js',
+  '../scripts/smoke-console-ui-accounts.js',
 ];
 
 const mojibakePattern = /�|縺|繧|繝|螳|莠|譛|騾|隕|謚|蜑|蠕|蛛|螟|髢|讖|蛻|遒|蜿|菴|谺|蝗|蜀|豁ｴ|霑|逕|||Ａ|\?{6,}/;

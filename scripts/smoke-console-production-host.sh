@@ -178,6 +178,12 @@ echo "ok console catalog audit"
 docker exec "$API_CONTAINER" npm run verify:headless
 echo "ok headless browser"
 
+docker exec \
+  -e XACTIONS_BASE_URL="$BASE_URL" \
+  -e XACTIONS_SMOKE_USERNAME="$SMOKE_USERNAME" \
+  "$API_CONTAINER" npm run smoke:console-ui-accounts
+echo "ok console account UI"
+
 worker_status="$(docker inspect -f '{{.State.Status}}' "$WORKER_CONTAINER")"
 if [[ "$worker_status" != "running" ]]; then
   echo "worker container is not running: ${worker_status}" >&2
