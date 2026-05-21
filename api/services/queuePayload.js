@@ -1,3 +1,5 @@
+import { decrypt, encrypt } from './sessionCrypto.js';
+
 const sensitiveQueueKeys = new Set([
   'sessionCookie',
   'encryptedCookie',
@@ -8,6 +10,11 @@ const sensitiveQueueKeys = new Set([
   'refreshToken',
   'password',
   'secret',
+]);
+
+const encryptedConfigKeysByType = new Map([
+  ['sendDM', ['message']],
+  ['targetEngage', ['dmMessage']],
 ]);
 
 function sanitizeQueueValue(value) {
@@ -31,9 +38,47 @@ function hasSensitiveQueueKey(value, keyName = null) {
   ) || hasSensitiveQueueKey(item, keyName));
 }
 
+function splitEncryptedJobConfig(type, config) {
+  if (!config || typeof config !== 'object' || Array.isArray(config)) {
+    return { visibleConfig: config, encryptedJobConfig: null };
+  }
+
+  const keys = encryptedConfigKeysByType.get(type) || [];
+  if (!keys.length) return { visibleConfig: config, encryptedJobConfig: null };
+
+  const visibleConfig = { ...config };
+  const encryptedConfig = {};
+
+  for (const key of keys) {
+    if (typeof visibleConfig[key] !== 'undefined') {
+      encryptedConfig[key] = visibleConfig[key];
+      delete visibleConfig[key];
+    }
+  }
+
+  if (!Object.keys(encryptedConfig).length) {
+    return { visibleConfig, encryptedJobConfig: null };
+  }
+
+  return {
+    visibleConfig,
+    encryptedJobConfig: encrypt(JSON.stringify(encryptedConfig)),
+  };
+}
+
 function sanitizeQueueJobData(jobData = {}) {
   const hadSessionCookie = hasSensitiveQueueKey(jobData, 'sessionCookie');
   const sanitized = sanitizeQueueValue(jobData);
+  const { visibleConfig, encryptedJobConfig } = splitEncryptedJobConfig(
+    sanitized.type,
+    sanitized.config
+  );
+
+  sanitized.config = visibleConfig;
+  if (encryptedJobConfig) {
+    sanitized.encryptedJobConfig = encryptedJobConfig;
+    sanitized.hasEncryptedJobConfig = true;
+  }
 
   if (hadSessionCookie && sanitized.userId && !sanitized.accountId) {
     sanitized.authMethod = 'session';
@@ -42,8 +87,22 @@ function sanitizeQueueJobData(jobData = {}) {
   return sanitized;
 }
 
+function decryptEncryptedJobConfig(jobData = {}) {
+  if (!jobData.encryptedJobConfig) return {};
+  return JSON.parse(decrypt(jobData.encryptedJobConfig));
+}
+
+function restoreQueueJobConfig(jobData = {}, config = jobData.config || {}) {
+  return {
+    ...(config || {}),
+    ...decryptEncryptedJobConfig(jobData),
+  };
+}
+
 export {
+  decryptEncryptedJobConfig,
   hasSensitiveQueueKey,
+  restoreQueueJobConfig,
   sanitizeQueueJobData,
   sanitizeQueueValue,
   sensitiveQueueKeys,

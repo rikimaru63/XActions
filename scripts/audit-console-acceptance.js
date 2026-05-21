@@ -154,9 +154,15 @@ function auditStaticAcceptance() {
 
   const queuePayloadMissing = hasAll(queuePayload + jobQueue, [
     'sanitizeQueueJobData',
+    'restoreQueueJobConfig',
+    'encryptedConfigKeysByType',
+    "['sendDM', ['message']]",
+    "['targetEngage', ['dmMessage']]",
+    'encryptedJobConfig',
     'sensitiveQueueKeys',
     'sessionCookie',
     "sanitized.authMethod = 'session'",
+    'restoreQueueJobConfig(job.data)',
     'operationsQueue.add(sanitizedJobData.type, sanitizedJobData',
   ]);
 
@@ -284,7 +290,7 @@ function auditStaticAcceptance() {
     ),
     item(
       'queue-payload-secrets',
-      'Queued jobs do not carry session cookies or token material; workers restore session data from DB at execution time.',
+      'Queued jobs do not carry session cookies, token material, or plaintext DM bodies; workers restore protected data at execution time.',
       queuePayloadMissing.length === 0,
       { service: 'api/services/queuePayload.js', queue: 'api/services/jobQueue.js' },
       queuePayloadMissing

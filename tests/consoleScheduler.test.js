@@ -21,7 +21,7 @@ import {
   recoverRetryConfig,
 } from '../api/services/consoleRetryConfig.js';
 import { summarizeChildStatuses } from '../api/services/operationBatches.js';
-import { sanitizeQueueJobData } from '../api/services/queuePayload.js';
+import { restoreQueueJobConfig, sanitizeQueueJobData } from '../api/services/queuePayload.js';
 import {
   getJobRetryState,
   normalizeScheduleMaxRetries,
@@ -314,6 +314,50 @@ describe('console scheduler helpers', () => {
       },
     });
     expect(JSON.stringify(jobData)).not.toContain('secret');
+  });
+
+  it('encrypts DM bodies before they reach Bull job data', () => {
+    const sendDmJobData = sanitizeQueueJobData({
+      type: 'sendDM',
+      operationId: 'op_dm',
+      userId: 'user_1',
+      accountId: 'account_1',
+      config: {
+        username: 'target_user',
+        message: 'private dm body',
+        dryRun: false,
+      },
+    });
+
+    expect(sendDmJobData.config).toEqual({
+      username: 'target_user',
+      dryRun: false,
+    });
+    expect(sendDmJobData.encryptedJobConfig).toBeTruthy();
+    expect(JSON.stringify(sendDmJobData)).not.toContain('private dm body');
+    expect(restoreQueueJobConfig(sendDmJobData)).toMatchObject({
+      username: 'target_user',
+      message: 'private dm body',
+      dryRun: false,
+    });
+
+    const targetEngageJobData = sanitizeQueueJobData({
+      type: 'targetEngage',
+      operationId: 'op_target',
+      userId: 'user_1',
+      accountId: 'account_1',
+      config: {
+        targetUsername: 'target_user',
+        likeCount: 0,
+        follow: false,
+        dmMessage: 'private target dm',
+        dryRun: false,
+      },
+    });
+
+    expect(targetEngageJobData.config.dmMessage).toBeUndefined();
+    expect(JSON.stringify(targetEngageJobData)).not.toContain('private target dm');
+    expect(restoreQueueJobConfig(targetEngageJobData).dmMessage).toBe('private target dm');
   });
 
   it('keeps full DM text out of the legacy messages history config', () => {

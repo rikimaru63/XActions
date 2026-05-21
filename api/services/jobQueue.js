@@ -63,7 +63,7 @@ import { getDecryptedSessionCookie } from '../routes/session-auth.js';
 import { getAccountForUser, getDecryptedAccountCookie, markAccountSessionExpired } from './accountStore.js';
 import { withAccountExecutionLock } from './accountExecutionLock.js';
 import { refreshParentOperationByChild } from './operationBatches.js';
-import { sanitizeQueueJobData } from './queuePayload.js';
+import { restoreQueueJobConfig, sanitizeQueueJobData } from './queuePayload.js';
 import { startScheduledActionScheduler } from './scheduledActions.js';
 import { getJobRetryState, normalizeScheduleMaxRetries } from './retryPolicy.js';
 
@@ -663,7 +663,7 @@ async function handlePortability(config, progress) {
 }
 
 async function resolveJobConfig(job) {
-  const config = job.data.config || {};
+  const config = restoreQueueJobConfig(job.data);
 
   if (job.data.accountId) {
     const account = job.data.userId
