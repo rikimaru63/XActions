@@ -15,6 +15,10 @@ import {
 import { explicitAccountIdsFromBody } from './accountSelection.js';
 import { decrypt, encrypt } from './sessionCrypto.js';
 import { calculateNextRunAt, normalizeScheduleInput } from './scheduleUtils.js';
+import {
+  normalizeScheduleMaxRetries,
+  queueAttemptsForSchedule,
+} from './retryPolicy.js';
 
 const prisma = new PrismaClient();
 const schedulerId = `${os.hostname()}-${process.pid}`;
@@ -128,7 +132,7 @@ async function createSchedulesFromRequest(user, body) {
   const nextRunAt = calculateNextRunAt(scheduleInput);
   const accountIds = await resolveAccountIds(user, feature, body);
   const encryptedConfig = encrypt(JSON.stringify(config));
-  const maxRetries = Math.min(Math.max(Number(body.maxRetries) || 2, 0), 5);
+  const maxRetries = normalizeScheduleMaxRetries(body.maxRetries);
   const name = String(body.name || feature.title || feature.id).trim().slice(0, 80);
 
   const schedules = [];
@@ -242,6 +246,11 @@ async function enqueueScheduledAction(schedule, queueJobFn, options = {}) {
       accountId: fullSchedule.accountId,
       authMethod: 'session',
       config: payload.jobConfig,
+      attempts: queueAttemptsForSchedule(fullSchedule.maxRetries),
+      backoff: {
+        type: 'exponential',
+        delay: 2000,
+      },
     });
 
     if (options.advanceSchedule !== false) {
@@ -338,10 +347,11 @@ async function processDueScheduledActions(queueJobFn, options = {}) {
       results.push({ scheduledActionId: item.id, ...result });
     } catch (error) {
       const failureCount = (schedule.failureCount || 0) + 1;
+      const maxRetries = normalizeScheduleMaxRetries(schedule.maxRetries);
       await prisma.scheduledAction.update({
         where: { id: item.id },
         data: {
-          status: failureCount > (schedule.maxRetries || 2) ? 'failed' : 'active',
+          status: failureCount > maxRetries ? 'failed' : 'active',
           lockedAt: null,
           lockedBy: null,
           failureCount,

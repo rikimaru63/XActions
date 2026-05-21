@@ -8,6 +8,7 @@ import {
   publicSchedule,
 } from '../services/scheduledActions.js';
 import { calculateNextRunAt, normalizeScheduleInput } from '../services/scheduleUtils.js';
+import { normalizeScheduleMaxRetries } from '../services/retryPolicy.js';
 
 const router = express.Router();
 const prisma = new PrismaClient();
@@ -90,7 +91,7 @@ router.patch('/:id', async (req, res) => {
     const data = {};
     if (typeof req.body.name === 'string') data.name = req.body.name.trim().slice(0, 80) || schedule.name;
     if (['active', 'paused', 'completed', 'failed'].includes(req.body.status)) data.status = req.body.status;
-    if (typeof req.body.maxRetries !== 'undefined') data.maxRetries = Math.min(Math.max(Number(req.body.maxRetries) || 0, 0), 5);
+    if (typeof req.body.maxRetries !== 'undefined') data.maxRetries = normalizeScheduleMaxRetries(req.body.maxRetries, schedule.maxRetries);
 
     if (req.body.schedule) {
       const scheduleInput = normalizeScheduleInput(req.body.schedule);

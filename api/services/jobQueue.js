@@ -23,6 +23,7 @@ import { getDecryptedAccountCookie, markAccountSessionExpired } from './accountS
 import { withAccountExecutionLock } from './accountExecutionLock.js';
 import { refreshParentOperationByChild } from './operationBatches.js';
 import { startScheduledActionScheduler } from './scheduledActions.js';
+import { getJobRetryState, normalizeScheduleMaxRetries } from './retryPolicy.js';
 
 const prisma = new PrismaClient();
 
@@ -91,8 +92,13 @@ async function addJob(type, data, options = {}) {
  */
 async function queueJob(jobData) {
   const explicitJobId = jobData.operationId || jobData.id;
+  const attempts = Number(jobData.attempts);
+  const delay = Number(jobData.delay);
   const job = await operationsQueue.add(jobData.type, jobData, {
     priority: jobData.priority || 10,
+    ...(Number.isFinite(delay) && delay > 0 ? { delay } : {}),
+    ...(Number.isFinite(attempts) && attempts > 0 ? { attempts: Math.trunc(attempts) } : {}),
+    ...(jobData.backoff ? { backoff: jobData.backoff } : {}),
     ...(explicitJobId ? { jobId: explicitJobId } : {})
   });
   
@@ -620,19 +626,25 @@ operationsQueue.on('failed', async (job, err) => {
   console.error(`❌ Job failed: ${job.id}`, err);
 
   if (!job.data.operationId) return;
+  const retryState = getJobRetryState(job);
+  const errorMessage = err?.message || String(err || 'Job failed');
+  const now = new Date();
 
   await prisma.operation.update({
     where: { id: job.data.operationId },
     data: {
-      status: 'failed',
-      error: err.message,
-      retryCount: job.attemptsMade
+      status: retryState.willRetry ? 'processing' : 'failed',
+      error: errorMessage,
+      retryCount: retryState.attemptsMade,
+      ...(retryState.willRetry ? {} : { completedAt: now }),
     }
   });
 
-  await markAccountSessionExpired(job.data.userId, job.data.accountId, err).catch((error) => {
-    console.error(`Failed to mark X account expired: ${job.id}`, error);
-  });
+  if (!retryState.willRetry) {
+    await markAccountSessionExpired(job.data.userId, job.data.accountId, err).catch((error) => {
+      console.error(`Failed to mark X account expired: ${job.id}`, error);
+    });
+  }
 
   await refreshParentOperationByChild(job.data.operationId).catch((error) => {
     console.error(`Failed to update parent operation failure state: ${job.id}`, error);
@@ -642,9 +654,9 @@ operationsQueue.on('failed', async (job, err) => {
     await prisma.scheduledActionRun.update({
       where: { id: job.data.scheduledActionRunId },
       data: {
-        status: 'failed',
-        finishedAt: new Date(),
-        error: err.message,
+        status: retryState.willRetry ? 'running' : 'failed',
+        error: errorMessage,
+        ...(retryState.willRetry ? {} : { finishedAt: now }),
       },
     }).catch((error) => {
       console.error(`Failed to mark scheduled run failed: ${job.id}`, error);
@@ -658,15 +670,28 @@ operationsQueue.on('failed', async (job, err) => {
     }).catch(() => null);
 
     if (schedule) {
+      if (retryState.willRetry) {
+        await prisma.scheduledAction.update({
+          where: { id: schedule.id },
+          data: {
+            lastError: errorMessage,
+          },
+        }).catch((error) => {
+          console.error(`Failed to update scheduled action retry state: ${job.id}`, error);
+        });
+        return;
+      }
+
       const nextFailureCount = (schedule.failureCount || 0) + 1;
+      const maxRetries = normalizeScheduleMaxRetries(schedule.maxRetries);
       const nextStatus = schedule.scheduleType === 'once'
         ? 'failed'
-        : nextFailureCount > (schedule.maxRetries || 2) ? 'failed' : schedule.status;
+        : nextFailureCount > maxRetries ? 'failed' : schedule.status;
       await prisma.scheduledAction.update({
         where: { id: schedule.id },
         data: {
           failureCount: nextFailureCount,
-          lastError: err.message,
+          lastError: errorMessage,
           status: nextStatus,
         },
       }).catch((error) => {

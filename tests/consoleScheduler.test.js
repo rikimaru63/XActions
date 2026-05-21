@@ -5,6 +5,11 @@ import { explicitAccountIdsFromBody } from '../api/services/accountSelection.js'
 import { isSessionExpiredError } from '../api/services/accountStore.js';
 import { createActionPayload } from '../api/services/consoleActions.js';
 import { summarizeChildStatuses } from '../api/services/operationBatches.js';
+import {
+  getJobRetryState,
+  normalizeScheduleMaxRetries,
+  queueAttemptsForSchedule,
+} from '../api/services/retryPolicy.js';
 import { calculateNextRunAt } from '../api/services/scheduleUtils.js';
 
 describe('console scheduler helpers', () => {
@@ -99,5 +104,27 @@ describe('console scheduler helpers', () => {
     expect(explicitAccountIdsFromBody({ accountId: 'acc_1' })).toEqual(['acc_1']);
     expect(explicitAccountIdsFromBody({ accountIds: ['acc_1', 'acc_1', ' acc_2 '] })).toEqual(['acc_1', 'acc_2']);
     expect(explicitAccountIdsFromBody({})).toEqual([]);
+  });
+
+  it('maps schedule retry settings to queue attempts', () => {
+    expect(normalizeScheduleMaxRetries(undefined)).toBe(2);
+    expect(normalizeScheduleMaxRetries(0)).toBe(0);
+    expect(normalizeScheduleMaxRetries(99)).toBe(5);
+    expect(queueAttemptsForSchedule(0)).toBe(1);
+    expect(queueAttemptsForSchedule(2)).toBe(3);
+  });
+
+  it('distinguishes retrying jobs from final failures', () => {
+    expect(getJobRetryState({ attemptsMade: 1, opts: { attempts: 3 } })).toMatchObject({
+      attemptsMade: 1,
+      maxAttempts: 3,
+      willRetry: true,
+      remainingAttempts: 2,
+    });
+
+    expect(getJobRetryState({ attemptsMade: 3, opts: { attempts: 3 } })).toMatchObject({
+      willRetry: false,
+      remainingAttempts: 0,
+    });
   });
 });
