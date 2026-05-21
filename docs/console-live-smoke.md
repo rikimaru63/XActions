@@ -45,6 +45,13 @@ XACTIONS_LIVE_READONLY_SOURCE='existing' \
 bash /tmp/xactions-live-readonly.sh
 ```
 
+Cookieを入力せずに実行条件だけ確認する場合:
+
+```bash
+XACTIONS_LIVE_READONLY_SOURCE='diagnose' \
+bash /tmp/xactions-live-readonly.sh
+```
+
 ## VPSで実行する
 
 PowerShellからVPSへ入ります。

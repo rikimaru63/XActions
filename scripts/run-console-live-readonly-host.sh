@@ -22,9 +22,9 @@ require_command() {
 require_command docker
 
 case "$SOURCE" in
-  prompt|env|existing) ;;
+  prompt|env|existing|diagnose) ;;
   *)
-    echo "XACTIONS_LIVE_READONLY_SOURCE must be prompt, env, or existing." >&2
+    echo "XACTIONS_LIVE_READONLY_SOURCE must be prompt, env, existing, or diagnose." >&2
     exit 1
     ;;
 esac
@@ -42,6 +42,44 @@ echo "apiContainer=${API_CONTAINER}"
 echo "smokeUsername=${SMOKE_USERNAME}"
 echo "profileTarget=${PROFILE_TARGET}"
 echo "source=${SOURCE}"
+
+diagnose_readiness() {
+  echo "hostLiveCookieA=$([[ -n "${XACTIONS_LIVE_ACCOUNT_A_COOKIE:-}" ]] && echo present || echo missing)"
+  echo "hostLiveCookieB=$([[ -n "${XACTIONS_LIVE_ACCOUNT_B_COOKIE:-}" ]] && echo present || echo missing)"
+
+  docker exec -i \
+    -e "XACTIONS_SMOKE_USERNAME=${SMOKE_USERNAME}" \
+    "$API_CONTAINER" node --input-type=module <<'NODE'
+import { PrismaClient } from '@prisma/client';
+
+const prisma = new PrismaClient();
+try {
+  const user = await prisma.user.findUnique({
+    where: { username: process.env.XACTIONS_SMOKE_USERNAME },
+    select: { id: true, username: true },
+  });
+  const activeAccounts = user
+    ? await prisma.xAccount.findMany({
+        where: { userId: user.id, status: 'active' },
+        select: { id: true, status: true, lastVerifiedAt: true },
+      })
+    : [];
+
+  console.log(JSON.stringify({
+    ok: true,
+    smokeUserFound: Boolean(user),
+    activeXAccounts: activeAccounts.length,
+    verifiedActiveXAccounts: activeAccounts.filter((account) => account.lastVerifiedAt).length,
+    containerLiveCookieA: Boolean(process.env.XACTIONS_LIVE_ACCOUNT_A_COOKIE),
+    containerLiveCookieB: Boolean(process.env.XACTIONS_LIVE_ACCOUNT_B_COOKIE),
+    readyWithExistingAccounts: activeAccounts.length >= 2,
+    readyWithContainerCookies: Boolean(process.env.XACTIONS_LIVE_ACCOUNT_A_COOKIE && process.env.XACTIONS_LIVE_ACCOUNT_B_COOKIE),
+  }, null, 2));
+} finally {
+  await prisma.$disconnect();
+}
+NODE
+}
 
 run_with_existing_accounts() {
   docker exec \
@@ -70,6 +108,9 @@ run_with_cookie_stdin() {
 }
 
 case "$SOURCE" in
+  diagnose)
+    diagnose_readiness
+    ;;
   existing)
     run_with_existing_accounts
     ;;
