@@ -29,6 +29,50 @@ case "$SOURCE" in
     ;;
 esac
 
+LIVE_ACCOUNT_SELECTOR_ENV_VARS=(
+  XACTIONS_LIVE_ACCOUNT_IDS
+  XACTIONS_LIVE_ACCOUNT_A_ID
+  XACTIONS_LIVE_ACCOUNT_B_ID
+  XACTIONS_LIVE_ACCOUNT_USERNAMES
+  XACTIONS_LIVE_ACCOUNT_A_USERNAME
+  XACTIONS_LIVE_ACCOUNT_B_USERNAME
+)
+LIVE_ACCOUNT_READINESS_ENV_VARS=(
+  XACTIONS_LIVE_ACCOUNT_A_COOKIE
+  XACTIONS_LIVE_ACCOUNT_B_COOKIE
+  "${LIVE_ACCOUNT_SELECTOR_ENV_VARS[@]}"
+  XACTIONS_LIVE_USE_EXISTING_ACCOUNTS
+)
+
+env_true() {
+  case "${1,,}" in
+    1|true|yes|on) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+append_host_env_if_present() {
+  local target_array_name="$1"
+  shift
+  local -n target_array="$target_array_name"
+  local var_name
+  for var_name in "$@"; do
+    if [[ -n "${!var_name:-}" ]]; then
+      target_array+=(-e "${var_name}=${!var_name}")
+    fi
+  done
+}
+
+host_has_existing_account_selector() {
+  local var_name
+  for var_name in "${LIVE_ACCOUNT_SELECTOR_ENV_VARS[@]}"; do
+    if [[ -n "${!var_name:-}" ]]; then
+      return 0
+    fi
+  done
+  env_true "${XACTIONS_LIVE_USE_EXISTING_ACCOUNTS:-}"
+}
+
 if [[ -z "$API_CONTAINER" ]]; then
   API_CONTAINER="$(find_api_container)"
 fi
@@ -43,6 +87,20 @@ echo "smokeUsername=${SMOKE_USERNAME}"
 echo "profileTarget=${PROFILE_TARGET}"
 echo "source=${SOURCE}"
 
+container_has_existing_account_selector() {
+  docker exec "$API_CONTAINER" sh -lc '
+case "$(printf "%s" "${XACTIONS_LIVE_USE_EXISTING_ACCOUNTS:-}" | tr "[:upper:]" "[:lower:]")" in
+  1|true|yes|on) exit 0 ;;
+esac
+[ -n "${XACTIONS_LIVE_ACCOUNT_IDS:-}" ] \
+  || [ -n "${XACTIONS_LIVE_ACCOUNT_A_ID:-}" ] \
+  || [ -n "${XACTIONS_LIVE_ACCOUNT_B_ID:-}" ] \
+  || [ -n "${XACTIONS_LIVE_ACCOUNT_USERNAMES:-}" ] \
+  || [ -n "${XACTIONS_LIVE_ACCOUNT_A_USERNAME:-}" ] \
+  || [ -n "${XACTIONS_LIVE_ACCOUNT_B_USERNAME:-}" ]
+'
+}
+
 diagnose_readiness() {
   echo "hostLiveCookieA=$([[ -n "${XACTIONS_LIVE_ACCOUNT_A_COOKIE:-}" ]] && echo present || echo missing)"
   echo "hostLiveCookieB=$([[ -n "${XACTIONS_LIVE_ACCOUNT_B_COOKIE:-}" ]] && echo present || echo missing)"
@@ -52,21 +110,7 @@ diagnose_readiness() {
     -e "XACTIONS_SMOKE_USERNAME=${SMOKE_USERNAME}"
     -e "XACTIONS_LIVE_PROFILE_TARGET=${PROFILE_TARGET}"
   )
-  if [[ -n "${XACTIONS_LIVE_ACCOUNT_A_COOKIE:-}" ]]; then
-    args+=(-e "XACTIONS_LIVE_ACCOUNT_A_COOKIE=${XACTIONS_LIVE_ACCOUNT_A_COOKIE}")
-  fi
-  if [[ -n "${XACTIONS_LIVE_ACCOUNT_B_COOKIE:-}" ]]; then
-    args+=(-e "XACTIONS_LIVE_ACCOUNT_B_COOKIE=${XACTIONS_LIVE_ACCOUNT_B_COOKIE}")
-  fi
-  if [[ -n "${XACTIONS_LIVE_ACCOUNT_IDS:-}" ]]; then
-    args+=(-e "XACTIONS_LIVE_ACCOUNT_IDS=${XACTIONS_LIVE_ACCOUNT_IDS}")
-  fi
-  if [[ -n "${XACTIONS_LIVE_ACCOUNT_USERNAMES:-}" ]]; then
-    args+=(-e "XACTIONS_LIVE_ACCOUNT_USERNAMES=${XACTIONS_LIVE_ACCOUNT_USERNAMES}")
-  fi
-  if [[ -n "${XACTIONS_LIVE_USE_EXISTING_ACCOUNTS:-}" ]]; then
-    args+=(-e "XACTIONS_LIVE_USE_EXISTING_ACCOUNTS=${XACTIONS_LIVE_USE_EXISTING_ACCOUNTS}")
-  fi
+  append_host_env_if_present args "${LIVE_ACCOUNT_READINESS_ENV_VARS[@]}"
 
   docker exec "${args[@]}" \
     -e XACTIONS_LIVE_READONLY_DIAGNOSE=true \
@@ -74,12 +118,20 @@ diagnose_readiness() {
 }
 
 run_with_existing_accounts() {
-  docker exec \
-    -e "XACTIONS_BASE_URL=${BASE_URL}" \
-    -e "XACTIONS_SMOKE_USERNAME=${SMOKE_USERNAME}" \
-    -e "XACTIONS_LIVE_PROFILE_TARGET=${PROFILE_TARGET}" \
-    -e XACTIONS_LIVE_USE_EXISTING_ACCOUNTS=true \
-    "$API_CONTAINER" npm run smoke:console-live-readonly
+  local args=(
+    -e "XACTIONS_BASE_URL=${BASE_URL}"
+    -e "XACTIONS_SMOKE_USERNAME=${SMOKE_USERNAME}"
+    -e "XACTIONS_LIVE_PROFILE_TARGET=${PROFILE_TARGET}"
+  )
+  append_host_env_if_present args "${LIVE_ACCOUNT_SELECTOR_ENV_VARS[@]}"
+  if env_true "${XACTIONS_LIVE_USE_EXISTING_ACCOUNTS:-}"; then
+    args+=(-e "XACTIONS_LIVE_USE_EXISTING_ACCOUNTS=${XACTIONS_LIVE_USE_EXISTING_ACCOUNTS}")
+  fi
+  if ! host_has_existing_account_selector && ! container_has_existing_account_selector; then
+    args+=(-e XACTIONS_LIVE_USE_EXISTING_ACCOUNTS=true)
+  fi
+
+  docker exec "${args[@]}" "$API_CONTAINER" npm run smoke:console-live-readonly
 }
 
 run_with_cookie_stdin() {
