@@ -47,38 +47,30 @@ diagnose_readiness() {
   echo "hostLiveCookieA=$([[ -n "${XACTIONS_LIVE_ACCOUNT_A_COOKIE:-}" ]] && echo present || echo missing)"
   echo "hostLiveCookieB=$([[ -n "${XACTIONS_LIVE_ACCOUNT_B_COOKIE:-}" ]] && echo present || echo missing)"
 
-  docker exec -i \
-    -e "XACTIONS_SMOKE_USERNAME=${SMOKE_USERNAME}" \
-    "$API_CONTAINER" node --input-type=module <<'NODE'
-import { PrismaClient } from '@prisma/client';
+  local args=(
+    -e "XACTIONS_BASE_URL=${BASE_URL}"
+    -e "XACTIONS_SMOKE_USERNAME=${SMOKE_USERNAME}"
+    -e "XACTIONS_LIVE_PROFILE_TARGET=${PROFILE_TARGET}"
+  )
+  if [[ -n "${XACTIONS_LIVE_ACCOUNT_A_COOKIE:-}" ]]; then
+    args+=(-e "XACTIONS_LIVE_ACCOUNT_A_COOKIE=${XACTIONS_LIVE_ACCOUNT_A_COOKIE}")
+  fi
+  if [[ -n "${XACTIONS_LIVE_ACCOUNT_B_COOKIE:-}" ]]; then
+    args+=(-e "XACTIONS_LIVE_ACCOUNT_B_COOKIE=${XACTIONS_LIVE_ACCOUNT_B_COOKIE}")
+  fi
+  if [[ -n "${XACTIONS_LIVE_ACCOUNT_IDS:-}" ]]; then
+    args+=(-e "XACTIONS_LIVE_ACCOUNT_IDS=${XACTIONS_LIVE_ACCOUNT_IDS}")
+  fi
+  if [[ -n "${XACTIONS_LIVE_ACCOUNT_USERNAMES:-}" ]]; then
+    args+=(-e "XACTIONS_LIVE_ACCOUNT_USERNAMES=${XACTIONS_LIVE_ACCOUNT_USERNAMES}")
+  fi
+  if [[ -n "${XACTIONS_LIVE_USE_EXISTING_ACCOUNTS:-}" ]]; then
+    args+=(-e "XACTIONS_LIVE_USE_EXISTING_ACCOUNTS=${XACTIONS_LIVE_USE_EXISTING_ACCOUNTS}")
+  fi
 
-const prisma = new PrismaClient();
-try {
-  const user = await prisma.user.findUnique({
-    where: { username: process.env.XACTIONS_SMOKE_USERNAME },
-    select: { id: true, username: true },
-  });
-  const activeAccounts = user
-    ? await prisma.xAccount.findMany({
-        where: { userId: user.id, status: 'active' },
-        select: { id: true, status: true, lastVerifiedAt: true },
-      })
-    : [];
-
-  console.log(JSON.stringify({
-    ok: true,
-    smokeUserFound: Boolean(user),
-    activeXAccounts: activeAccounts.length,
-    verifiedActiveXAccounts: activeAccounts.filter((account) => account.lastVerifiedAt).length,
-    containerLiveCookieA: Boolean(process.env.XACTIONS_LIVE_ACCOUNT_A_COOKIE),
-    containerLiveCookieB: Boolean(process.env.XACTIONS_LIVE_ACCOUNT_B_COOKIE),
-    readyWithExistingAccounts: activeAccounts.length >= 2,
-    readyWithContainerCookies: Boolean(process.env.XACTIONS_LIVE_ACCOUNT_A_COOKIE && process.env.XACTIONS_LIVE_ACCOUNT_B_COOKIE),
-  }, null, 2));
-} finally {
-  await prisma.$disconnect();
-}
-NODE
+  docker exec "${args[@]}" \
+    -e XACTIONS_LIVE_READONLY_DIAGNOSE=true \
+    "$API_CONTAINER" npm run smoke:console-live-readonly
 }
 
 run_with_existing_accounts() {

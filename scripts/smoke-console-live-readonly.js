@@ -12,6 +12,9 @@ const smokeToken = process.env.XACTIONS_SMOKE_TOKEN || '';
 const profileTarget = String(process.env.XACTIONS_LIVE_PROFILE_TARGET || 'x').replace(/^@/, '').trim();
 const smokeId = `live_${Date.now()}_${randomUUID().slice(0, 8)}`;
 const accountPrefix = 'smoke_live_readonly_';
+const diagnoseOnly = envBool('XACTIONS_LIVE_READONLY_DIAGNOSE')
+  || process.argv.includes('--diagnose')
+  || process.argv.includes('diagnose');
 
 const liveCookies = [
   process.env.XACTIONS_LIVE_ACCOUNT_A_COOKIE,
@@ -57,6 +60,99 @@ function shouldUseExistingAccounts() {
   return liveAccountIdsFromEnv().length > 0
     || liveAccountUsernamesFromEnv().length > 0
     || envBool('XACTIONS_LIVE_USE_EXISTING_ACCOUNTS');
+}
+
+async function diagnoseReadiness(user) {
+  const activeAccounts = user
+    ? await prisma.xAccount.findMany({
+        where: { userId: user.id, status: 'active' },
+        select: {
+          id: true,
+          username: true,
+          status: true,
+          isDefault: true,
+          lastVerifiedAt: true,
+          updatedAt: true,
+        },
+        orderBy: [
+          { isDefault: 'desc' },
+          { updatedAt: 'desc' },
+        ],
+        take: 10,
+      })
+    : [];
+
+  const requestedIds = liveAccountIdsFromEnv();
+  const requestedUsernames = liveAccountUsernamesFromEnv();
+  const useExisting = envBool('XACTIONS_LIVE_USE_EXISTING_ACCOUNTS');
+  const selectorCount = [
+    requestedIds.length > 0,
+    requestedUsernames.length > 0,
+    useExisting,
+  ].filter(Boolean).length;
+  const activeIds = new Set(activeAccounts.map((account) => account.id));
+  const activeUsernames = new Set(activeAccounts.map((account) => String(account.username || '').toLowerCase()));
+  const readyWithCookies = Boolean(liveCookies[0] && liveCookies[1] && liveCookies[0] !== liveCookies[1]);
+  const readyWithIds = requestedIds.length === 2 && requestedIds.every((id) => activeIds.has(id));
+  const readyWithUsernames = requestedUsernames.length === 2
+    && requestedUsernames.every((username) => activeUsernames.has(username));
+  const readyWithFirstActive = useExisting && activeAccounts.length >= 2;
+  const readyWithExistingAccounts = selectorCount === 1
+    && (readyWithIds || readyWithUsernames || readyWithFirstActive);
+
+  const reasons = [];
+  if (!user) reasons.push(`Smoke user not found: ${smokeUsername}`);
+  if (!profileTarget) reasons.push('XACTIONS_LIVE_PROFILE_TARGET is empty.');
+  if (liveCookies[0] && liveCookies[1] && liveCookies[0] === liveCookies[1]) {
+    reasons.push('XACTIONS_LIVE_ACCOUNT_A_COOKIE and XACTIONS_LIVE_ACCOUNT_B_COOKIE must be different.');
+  }
+  if (selectorCount > 1) {
+    reasons.push('Use only one existing-account selector at a time.');
+  }
+  if (!readyWithCookies && !readyWithExistingAccounts) {
+    reasons.push('Provide two live cookies or select exactly two active existing XAccounts.');
+  }
+
+  return {
+    smokeUsername,
+    smokeUserFound: Boolean(user),
+    profileTarget,
+    liveCookies: {
+      accountA: Boolean(liveCookies[0]),
+      accountB: Boolean(liveCookies[1]),
+      bothPresent: Boolean(liveCookies[0] && liveCookies[1]),
+      different: Boolean(liveCookies[0] && liveCookies[1] && liveCookies[0] !== liveCookies[1]),
+    },
+    existingSelectors: {
+      ids: requestedIds.length,
+      usernames: requestedUsernames.length,
+      useFirstActive: useExisting,
+      selectorCount,
+    },
+    activeXAccounts: activeAccounts.length,
+    verifiedActiveXAccounts: activeAccounts.filter((account) => account.lastVerifiedAt).length,
+    accounts: activeAccounts.map((account) => ({
+      id: account.id,
+      username: account.username,
+      status: account.status,
+      isDefault: account.isDefault,
+      verified: Boolean(account.lastVerifiedAt),
+      updatedAt: account.updatedAt,
+    })),
+    readyWithCookies,
+    readyWithExistingAccounts,
+    ready: Boolean(user && profileTarget && (readyWithCookies || readyWithExistingAccounts)),
+    reasons,
+  };
+}
+
+function readinessError(readiness) {
+  const message = readiness.reasons.length
+    ? readiness.reasons.join(' ')
+    : 'Live readonly smoke is not ready.';
+  const error = new Error(message);
+  error.readiness = readiness;
+  return error;
 }
 
 const created = {
@@ -121,6 +217,10 @@ async function resolveSmokeUser() {
   const user = await prisma.user.findUnique({ where: { username: smokeUsername } });
   if (!user) throw new Error(`Smoke user not found: ${smokeUsername}`);
   return user;
+}
+
+async function findSmokeUser() {
+  return prisma.user.findUnique({ where: { username: smokeUsername } });
 }
 
 async function resolveToken(user) {
@@ -423,7 +523,23 @@ async function assertNoCurrentResidue(userId) {
 async function main() {
   assert(process.env.DATABASE_URL, 'DATABASE_URL is required.');
 
-  const user = await resolveSmokeUser();
+  const user = diagnoseOnly ? await findSmokeUser() : await resolveSmokeUser();
+  const readiness = await diagnoseReadiness(user);
+
+  if (diagnoseOnly) {
+    console.log(JSON.stringify({
+      ok: readiness.ready,
+      diagnoseOnly: true,
+      baseUrl,
+      readiness,
+    }, null, 2));
+    return;
+  }
+
+  if (!readiness.ready) {
+    throw readinessError(readiness);
+  }
+
   const token = await resolveToken(user);
   const staleCleanup = await cleanupSmokeRows(user.id, { stale: true, staleHours: 24 });
   const liveAccounts = await resolveLiveAccounts(user, token);
@@ -541,8 +657,19 @@ async function main() {
   }, null, 2));
 }
 
+let mainError = null;
 try {
   await main();
+} catch (error) {
+  mainError = error;
+  console.error(JSON.stringify({
+    ok: false,
+    baseUrl,
+    smokeId,
+    error: error.message,
+    readiness: error.readiness || null,
+  }, null, 2));
+  process.exitCode = 1;
 } finally {
   try {
     const user = await prisma.user.findUnique({
@@ -556,4 +683,8 @@ try {
   } finally {
     await prisma.$disconnect();
   }
+}
+
+if (mainError) {
+  process.exit(process.exitCode || 1);
 }

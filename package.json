@@ -53,6 +53,7 @@
     "smoke:console-ui-accounts": "node scripts/smoke-console-ui-accounts.js",
     "smoke:console-scheduler": "node scripts/smoke-console-scheduler.js",
     "smoke:console-live-readonly": "node scripts/smoke-console-live-readonly.js",
+    "smoke:console-live-readonly:diagnose": "node scripts/smoke-console-live-readonly.js --diagnose",
     "test:payment": "node scripts/test-x402-payment.js",
     "deploy": "bash scripts/deploy.sh",
     "deploy:railway": "bash scripts/deploy.sh railway",
