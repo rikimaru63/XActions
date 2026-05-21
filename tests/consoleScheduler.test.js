@@ -413,6 +413,87 @@ describe('console scheduler helpers', () => {
     expect(workflowRun.jobConfig.dryRun).toBe(false);
   });
 
+  it('connects agent and portability actions to the console catalog', () => {
+    expect(getFeatureById('agent')).toMatchObject({
+      status: 'available',
+      consoleAction: 'agentCommand',
+      operationType: 'agentCommand',
+      accountRequired: true,
+      supportsSchedule: true,
+    });
+    expect(getFeatureById('portability')).toMatchObject({
+      status: 'available',
+      consoleAction: 'portability',
+      operationType: 'portability',
+      accountRequired: true,
+      supportsSchedule: false,
+    });
+  });
+
+  it('builds payloads for agent and portability actions', () => {
+    const agent = createActionPayload(
+      getFeatureById('agent'),
+      { action: 'score', text: 'Relevant post text', days: 7, limit: 5 },
+      'dryRun'
+    );
+    expect(agent).toMatchObject({
+      operationType: 'agentCommand',
+      operationConfig: {
+        sourceFeatureId: 'agent',
+        action: 'score',
+        hasText: true,
+        days: 7,
+        limit: 5,
+        dryRun: true,
+      },
+      jobConfig: {
+        action: 'score',
+        text: 'Relevant post text',
+        days: 7,
+        limit: 5,
+        dryRun: true,
+      },
+    });
+    expect(agent.operationConfig.text).toBeUndefined();
+
+    const portability = createActionPayload(
+      getFeatureById('portability'),
+      { action: 'export', username: '@source_user', formats: 'json,md', only: 'profile,tweets', limit: 100 },
+      'live'
+    );
+    expect(portability).toMatchObject({
+      operationType: 'portability',
+      operationConfig: {
+        sourceFeatureId: 'portability',
+        action: 'export',
+        username: 'source_user',
+        formats: ['json', 'md'],
+        only: ['profile', 'tweets'],
+        limit: 100,
+        dryRun: false,
+      },
+      jobConfig: {
+        action: 'export',
+        username: 'source_user',
+        formats: ['json', 'md'],
+        only: ['profile', 'tweets'],
+        limit: 100,
+        dryRun: false,
+      },
+    });
+
+    const diff = createActionPayload(
+      getFeatureById('portability'),
+      { action: 'diff', dirA: 'older', dirB: 'newer' },
+      'dryRun'
+    );
+    expect(diff.operationConfig).toMatchObject({
+      action: 'diff',
+      hasDiffDirs: true,
+      dryRun: true,
+    });
+  });
+
   it('connects posting actions without storing full post text in operation config', () => {
     for (const id of ['postTweet', 'postThread', 'createPoll', 'schedulePost']) {
       expect(getFeatureById(id)).toMatchObject({

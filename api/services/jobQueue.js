@@ -1,5 +1,8 @@
 import Queue from 'bull';
 import { PrismaClient } from '@prisma/client';
+import fs from 'fs';
+import fsp from 'fs/promises';
+import path from 'path';
 import { processUnfollowNonFollowers } from './operations/unfollowNonFollowers.js';
 import { processUnfollowEveryone } from './operations/unfollowEveryone.js';
 import { processDetectUnfollowers } from './operations/detectUnfollowers.js';
@@ -36,6 +39,12 @@ import { getLiveSpaces, getScheduledSpaces, scrapeSpace } from '../../src/spaces
 import { aggregateResults, analyzeBatch, analyzeSentiment, analyzeTweetPriceCorrelation } from '../../src/analytics/index.js';
 import { DatasetStore, listDatasets } from '../../src/scraping/paginationEngine.js';
 import workflows from '../../src/workflows/index.js';
+import { Scheduler } from '../../src/agents/scheduler.js';
+import { AgentDatabase } from '../../src/agents/database.js';
+import { ThoughtLeaderAgent } from '../../src/agents/thoughtLeaderAgent.js';
+import { exportAccount } from '../../src/portability/exporter.js';
+import { migrate } from '../../src/portability/importer.js';
+import { diffAndReport } from '../../src/portability/differ.js';
 import { getDecryptedSessionCookie } from '../routes/session-auth.js';
 import { getAccountForUser, getDecryptedAccountCookie, markAccountSessionExpired } from './accountStore.js';
 import { withAccountExecutionLock } from './accountExecutionLock.js';
@@ -44,6 +53,11 @@ import { startScheduledActionScheduler } from './scheduledActions.js';
 import { getJobRetryState, normalizeScheduleMaxRetries } from './retryPolicy.js';
 
 const prisma = new PrismaClient();
+const agentRuntime = {
+  instance: null,
+  startedAt: null,
+  lastError: null,
+};
 
 // In-memory job cancellation tracking
 const cancelledJobs = new Set();
@@ -334,6 +348,302 @@ function monitorQuery(type, target) {
   const username = cleaned.replace(/^@/, '');
   if (type === 'replies') return `to:${username}`;
   return `@${username}`;
+}
+
+function parseSessionCookiesForFile(sessionCookie) {
+  if (!sessionCookie) return [];
+  const raw = String(sessionCookie).trim();
+  const pairs = raw.includes('=')
+    ? raw.split(';').map((part) => part.trim()).filter(Boolean)
+    : [`auth_token=${raw}`];
+
+  return pairs.map((pair) => {
+    const eq = pair.indexOf('=');
+    if (eq <= 0) return null;
+    const name = pair.slice(0, eq).trim();
+    const value = pair.slice(eq + 1).trim();
+    if (!name || !value || !/^[A-Za-z0-9_.$-]+$/.test(name)) return null;
+    return {
+      name,
+      value,
+      domain: '.x.com',
+      path: '/',
+      secure: true,
+      httpOnly: name === 'auth_token',
+      sameSite: 'Lax',
+    };
+  }).filter(Boolean);
+}
+
+function authTokenValue(sessionCookie) {
+  const cookies = parseSessionCookiesForFile(sessionCookie);
+  return cookies.find((cookie) => cookie.name === 'auth_token')?.value || String(sessionCookie || '').trim();
+}
+
+function defaultAgentConfigPath() {
+  return path.resolve(process.cwd(), 'data', 'agent-config.json');
+}
+
+function loadAgentConfig() {
+  const configPath = defaultAgentConfigPath();
+  if (!fs.existsSync(configPath)) {
+    throw new Error('Agent config not found. Configure the agent before starting it.');
+  }
+  return {
+    configPath,
+    config: ThoughtLeaderAgent.loadConfig(configPath),
+  };
+}
+
+function redactAgentConfig(config) {
+  const safe = JSON.parse(JSON.stringify(config || {}));
+  if (safe.llm?.apiKey) {
+    safe.llm.apiKey = `${safe.llm.apiKey.slice(0, 8)}...${safe.llm.apiKey.slice(-4)}`;
+  }
+  if (safe.proxy?.url) safe.proxy.url = '***';
+  if (safe.browser?.proxy) safe.browser.proxy = '***';
+  return safe;
+}
+
+async function prepareAgentSessionFile(config, sessionCookie) {
+  const cookies = parseSessionCookiesForFile(sessionCookie);
+  if (!cookies.length) return null;
+  const sessionPath = path.resolve(process.cwd(), config.browser?.sessionPath || 'data/session.json');
+  await fsp.mkdir(path.dirname(sessionPath), { recursive: true });
+  await fsp.writeFile(sessionPath, JSON.stringify(cookies, null, 2));
+  return sessionPath;
+}
+
+function agentStatus(config = null) {
+  const running = !!agentRuntime.instance;
+  return {
+    running,
+    startedAt: agentRuntime.startedAt ? new Date(agentRuntime.startedAt).toISOString() : null,
+    lastError: agentRuntime.lastError,
+    configExists: fs.existsSync(defaultAgentConfigPath()),
+    accountUsername: config?.accountUsername || null,
+    ...(running && typeof agentRuntime.instance.getStatus === 'function'
+      ? { runtime: agentRuntime.instance.getStatus() }
+      : {}),
+  };
+}
+
+function withAgentDatabase(config, callback) {
+  const { config: agentConfig } = loadAgentConfig();
+  const db = new AgentDatabase(agentConfig.dbPath || 'data/agent.db');
+  try {
+    return callback(db);
+  } finally {
+    db.close();
+  }
+}
+
+async function handleAgentCommand(config) {
+  const action = config.action || 'status';
+
+  if (action === 'status') return agentStatus(config);
+
+  if (action === 'config') {
+    const { config: agentConfig } = loadAgentConfig();
+    return { config: redactAgentConfig(agentConfig) };
+  }
+
+  if (action === 'schedule') {
+    const { config: agentConfig } = loadAgentConfig();
+    const scheduler = agentRuntime.instance?.scheduler || new Scheduler({
+      timezone: agentConfig.schedule?.timezone || 'Asia/Tokyo',
+      sleepHours: agentConfig.schedule?.sleepHours || [23, 6],
+      searchTerms: agentConfig.niche?.searchTerms || [],
+      influencers: agentConfig.niche?.influencers || [],
+    });
+    const schedule = scheduler.getDailyPlan();
+    return { schedule, count: schedule.length };
+  }
+
+  if (action === 'report') {
+    return withAgentDatabase(config, (db) => ({
+      report: db.getGrowthReport(config.days || 30),
+      days: config.days || 30,
+    }));
+  }
+
+  if (action === 'content') {
+    return withAgentDatabase(config, (db) => {
+      const content = db.getRecentPosts(config.limit || 20);
+      return { content, count: content.length };
+    });
+  }
+
+  if (action === 'score') {
+    if (!agentRuntime.instance?.llm) {
+      throw new Error('Agent is not running. Start the agent before scoring feed text.');
+    }
+    const { config: agentConfig } = loadAgentConfig();
+    const score = await agentRuntime.instance.llm.scoreRelevance(
+      config.text,
+      agentConfig.niche?.keywords || []
+    );
+    return { score, textPreview: String(config.text || '').slice(0, 140) };
+  }
+
+  if (action === 'stop') {
+    if (config.dryRun !== false) {
+      return { dryRun: true, action, running: !!agentRuntime.instance };
+    }
+    if (!agentRuntime.instance) return { running: false, stopped: false };
+    const instance = agentRuntime.instance;
+    agentRuntime.instance = null;
+    agentRuntime.startedAt = null;
+    await instance.stop();
+    return { running: false, stopped: true };
+  }
+
+  if (action === 'start') {
+    const { configPath, config: agentConfig } = loadAgentConfig();
+    const sessionPath = await prepareAgentSessionFile(agentConfig, config.sessionCookie);
+    if (config.dryRun !== false) {
+      return {
+        dryRun: true,
+        action,
+        configPath,
+        sessionPrepared: !!sessionPath,
+        alreadyRunning: !!agentRuntime.instance,
+      };
+    }
+    if (agentRuntime.instance) return agentStatus(config);
+
+    const instance = new ThoughtLeaderAgent(agentConfig);
+    agentRuntime.instance = instance;
+    agentRuntime.startedAt = Date.now();
+    agentRuntime.lastError = null;
+    instance.start().catch((error) => {
+      console.error('Agent runtime crashed:', error);
+      agentRuntime.instance = null;
+      agentRuntime.startedAt = null;
+      agentRuntime.lastError = error.message;
+    });
+
+    return {
+      running: true,
+      startedAt: new Date(agentRuntime.startedAt).toISOString(),
+      sessionPrepared: !!sessionPath,
+    };
+  }
+
+  return agentStatus(config);
+}
+
+const portabilityExportsRoot = () => path.resolve(process.cwd(), 'exports');
+
+function resolveExportDir(value) {
+  if (!value) return null;
+  const root = portabilityExportsRoot();
+  const resolved = path.resolve(root, value);
+  if (resolved !== root && !resolved.startsWith(`${root}${path.sep}`)) {
+    throw new Error('Export directory must be inside the exports directory.');
+  }
+  return resolved;
+}
+
+async function listPortabilityExports() {
+  const root = portabilityExportsRoot();
+  let dirs = [];
+  try {
+    dirs = await fsp.readdir(root);
+  } catch {
+    return [];
+  }
+
+  const exports = [];
+  for (const dir of dirs) {
+    const dirPath = path.join(root, dir);
+    const stat = await fsp.stat(dirPath).catch(() => null);
+    if (!stat?.isDirectory()) continue;
+    const summary = await fsp.readFile(path.join(dirPath, 'summary.json'), 'utf-8')
+      .then((raw) => JSON.parse(raw))
+      .catch(() => null);
+    exports.push({
+      name: dir,
+      path: dirPath,
+      date: summary?.date || dir.split('_').pop(),
+      username: summary?.username || dir.split('_')[0],
+      phases: summary?.phases || {},
+      hasArchive: await fsp.access(path.join(dirPath, 'index.html')).then(() => true).catch(() => false),
+    });
+  }
+
+  return exports.sort((a, b) => b.name.localeCompare(a.name));
+}
+
+async function findPortabilityExport(username, requestedDir) {
+  if (requestedDir) return resolveExportDir(requestedDir);
+  const clean = String(username || '').replace(/^@/, '');
+  if (!clean) return null;
+  const exports = await listPortabilityExports();
+  return exports.find((item) => item.username === clean || item.name.startsWith(`${clean}_`))?.path || null;
+}
+
+async function handlePortability(config, progress) {
+  const action = config.action || 'exports';
+
+  if (action === 'exports') {
+    const exports = await listPortabilityExports();
+    return { exports, count: exports.length };
+  }
+
+  if (action === 'diff') {
+    const dirA = resolveExportDir(config.dirA);
+    const dirB = resolveExportDir(config.dirB);
+    const { diff, report } = await diffAndReport(dirA, dirB);
+    return { summary: diff.summary, diff, report };
+  }
+
+  if (action === 'migrate') {
+    const username = config.username || config.accountUsername;
+    const exportDir = await findPortabilityExport(username, config.exportDir);
+    if (!exportDir) throw new Error('No export found. Run an export first.');
+    return migrate({
+      platform: config.platform,
+      exportDir,
+      dryRun: config.dryRun !== false,
+      credentials: {},
+    });
+  }
+
+  const username = String(config.username || config.accountUsername || '').replace(/^@/, '');
+  if (!username) throw new Error('Export username is required.');
+
+  if (config.dryRun !== false) {
+    return {
+      dryRun: true,
+      action: 'export',
+      username,
+      formats: config.formats || ['json', 'csv', 'md'],
+      only: config.only || [],
+      limit: config.limit || 500,
+    };
+  }
+
+  if (!config.sessionCookie) throw new Error('Session cookie required. Reconnect your X account.');
+  const scrapersModule = await import('../../src/scrapers/index.js');
+  const scrapers = scrapersModule.default || scrapersModule;
+  const browser = await scrapers.createBrowser();
+  const page = await scrapers.createPage(browser);
+
+  try {
+    await scrapers.loginWithCookie(page, authTokenValue(config.sessionCookie));
+    return await exportAccount({
+      page,
+      username,
+      formats: config.formats || ['json', 'csv', 'md'],
+      only: config.only?.length ? config.only : undefined,
+      limit: config.limit || 500,
+      scrapers,
+      onProgress: progress,
+    });
+  } finally {
+    await browser.close().catch(() => {});
+  }
 }
 
 async function resolveJobConfig(job) {
@@ -823,6 +1133,24 @@ operationsQueue.process('runWorkflow', 1, async (job) => {
     userId: job.data.userId || 'console',
     isCancelled: () => isJobCancelled(job.data.operationId),
     onProgress: (event) => Promise.resolve(job.progress(event)).catch(() => {}),
+  });
+});
+
+operationsQueue.process('agentCommand', 1, async (job) => {
+  console.log(`🔄 Processing job ${job.id}: agentCommand`);
+
+  return withAccountExecutionLock(operationsQueue.client, job, async () => {
+    const config = await resolveJobConfig(job);
+    return handleAgentCommand(config);
+  });
+});
+
+operationsQueue.process('portability', 1, async (job) => {
+  console.log(`🔄 Processing job ${job.id}: portability`);
+
+  return withAccountExecutionLock(operationsQueue.client, job, async () => {
+    const config = await resolveJobConfig(job);
+    return handlePortability(config, (progress) => job.progress(progress));
   });
 });
 

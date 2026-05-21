@@ -581,6 +581,86 @@ function createActionPayload(feature, inputConfig, mode = 'dryRun', user = {}) {
       };
     }
 
+    case 'agentCommand': {
+      const requestedAction = String(config.action || 'status').trim().toLowerCase();
+      const action = ['status', 'config', 'schedule', 'report', 'content', 'score', 'start', 'stop'].includes(requestedAction)
+        ? requestedAction
+        : 'status';
+      const text = String(config.text || '').trim().slice(0, 10000);
+      const days = asNumber(config.days, 30, 1, 90);
+      const limit = asNumber(config.limit, 20, 1, 100);
+      if (action === 'score' && !text) throw new Error('スコア対象テキストを入力してください。');
+
+      return {
+        operationType: 'agentCommand',
+        operationConfig: {
+          sourceFeatureId: feature.id,
+          action,
+          hasText: !!text,
+          days,
+          limit,
+          dryRun,
+        },
+        jobConfig: {
+          action,
+          text,
+          days,
+          limit,
+          dryRun,
+        },
+      };
+    }
+
+    case 'portability': {
+      const requestedAction = String(config.action || 'exports').trim().toLowerCase();
+      const action = ['exports', 'export', 'migrate', 'diff'].includes(requestedAction) ? requestedAction : 'exports';
+      const username = normalizeUsername(config.username);
+      const formats = String(config.formats || 'json,csv,md')
+        .split(',')
+        .map((item) => item.trim().toLowerCase())
+        .filter((item) => ['json', 'csv', 'md'].includes(item));
+      const only = String(config.only || '')
+        .split(',')
+        .map((item) => item.trim().toLowerCase())
+        .filter(Boolean);
+      const limit = asNumber(config.limit, 500, 1, 5000);
+      const platform = String(config.platform || '').trim().toLowerCase();
+      const exportDir = String(config.exportDir || '').trim();
+      const dirA = String(config.dirA || '').trim();
+      const dirB = String(config.dirB || '').trim();
+
+      if (action === 'migrate' && !platform) throw new Error('移行先を入力してください。');
+      if (action === 'diff' && (!dirA || !dirB)) throw new Error('比較する2つのディレクトリを入力してください。');
+
+      return {
+        operationType: 'portability',
+        operationConfig: {
+          sourceFeatureId: feature.id,
+          action,
+          username,
+          formats: formats.length ? formats : ['json', 'csv', 'md'],
+          only,
+          limit,
+          platform,
+          hasExportDir: !!exportDir,
+          hasDiffDirs: !!(dirA && dirB),
+          dryRun,
+        },
+        jobConfig: {
+          action,
+          username,
+          formats: formats.length ? formats : ['json', 'csv', 'md'],
+          only,
+          limit,
+          platform,
+          exportDir,
+          dirA,
+          dirB,
+          dryRun,
+        },
+      };
+    }
+
     case 'extractVideo': {
       const tweetUrl = String(config.tweetUrl || '').trim();
       if (!tweetUrl) throw new Error('投稿URLを入力してください。');
