@@ -1,12 +1,15 @@
 # Console Live Readonly Smoke
 
 作成日: 2026-05-21
+更新日: 2026-05-22
 
-この手順は、本番環境で `/console` の実Xアカウント連携、複数アカウント、スケジュール実行、履歴導線が実際に動くことを確認するための最終スモークです。
+この手順は、本番環境で `/console` の実Xアカウント連携、複数アカウント実行、スケジュール実行、履歴導線が実際に動くことを確認するための最終スモークです。
+
+`profile` 取得だけを使う読み取り専用の確認です。投稿、DM、フォロー、Like などの副作用がある操作は実行しません。
 
 ## 確認すること
 
-- 2つの実X Cookieを `/api/accounts` から登録できる
+- 2つの実Xアカウントを `/api/accounts` から登録できる
 - 登録時にヘッドレスブラウザでXセッション検証が通る
 - 2アカウントを選択して `profile` 機能を `live` モードで即時実行できる
 - 2アカウント分の `once` スケジュールを作成できる
@@ -14,24 +17,19 @@
 - 実行履歴に親操作、子操作、スケジュール操作が表示される
 - テストで作成したアカウント、スケジュール、履歴が最後に削除される
 
-`profile` は読み取り専用です。投稿、DM、フォロー、いいねなどの副作用は発生しません。
-
 ## 前提
 
 - 本番URL: `https://xactions.logence.co.jp`
 - VPS: `root@100.114.184.59`
-- アプリ内テストユーザー: `test_account_20260521092255`
-- APIコンテナ内に `DATABASE_URL` と `JWT_SECRET` が設定されていること
-- Xにログイン済みの、別々の2アカウント分の有効なCookieがあること
+- テストアプリユーザー: `test_account_20260521092255`
+- APIコンテナ内に `DATABASE_URL` と `JWT_SECRET` が設定されている
+- Xにログイン済みの別々の実アカウント2件の有効なCookieがある
 
 Cookieは画面共有、ログ、履歴、リポジトリに残さないでください。
 
 ## 実アカウントを先に登録する
 
-live readonly smoke を毎回 Cookie 入力なしで実行したい場合は、2つの実Xアカウントを
-テストユーザーへ登録します。Cookie は標準入力で API コンテナへ渡し、ログには出しません。
-登録時にヘッドレスブラウザでログイン状態を確認し、通った場合だけ `active` な
-XAccount として保存します。
+毎回Cookieを入力せずに確認したい場合は、2つの実Xアカウントをテストユーザーへ登録します。Cookieは標準入力でAPIコンテナへ渡され、ログには出ません。登録時にヘッドレスブラウザでログイン状態を確認し、通った場合だけ `active` な `XAccount` として保存します。
 
 ```bash
 api="$(docker ps --format '{{.Names}}' | grep '^api-sg008w80csw08skkwcwswwgw' | head -n 1)"
@@ -39,7 +37,7 @@ docker cp "$api":/app/scripts/register-console-live-accounts-host.sh /tmp/xactio
 bash /tmp/xactions-register-live-accounts.sh
 ```
 
-登録後は、既存アカウントを使って smoke を実行できます。
+登録後、既存アカウントを使ってlive readonly smokeを実行します。
 
 ```bash
 api="$(docker ps --format '{{.Names}}' | grep '^api-sg008w80csw08skkwcwswwgw' | head -n 1)"
@@ -47,11 +45,9 @@ docker cp "$api":/app/scripts/run-console-live-readonly-host.sh /tmp/xactions-li
 XACTIONS_LIVE_READONLY_SOURCE='existing' bash /tmp/xactions-live-readonly.sh
 ```
 
-## VPS runner
+## 一時Cookieで直接実行する
 
-本番イメージには、Cookieを非表示入力して live smoke だけを実行する
-runner も入っています。Cookie は標準入力で API コンテナへ渡し、Coolify の
-永続環境変数には保存しません。
+登録を残さず、その場のCookieだけで実行する場合はrunnerを使います。Cookieは標準入力でAPIコンテナへ渡され、Coolifyの永続環境変数には保存されません。
 
 ```bash
 api="$(docker ps --format '{{.Names}}' | grep '^api-sg008w80csw08skkwcwswwgw' | head -n 1)"
@@ -59,75 +55,25 @@ docker cp "$api":/app/scripts/run-console-live-readonly-host.sh /tmp/xactions-li
 bash /tmp/xactions-live-readonly.sh
 ```
 
-既定の `XACTIONS_LIVE_READONLY_SOURCE=auto` は、利用可能な情報から安全な順に実行方法を選びます:
+`XACTIONS_LIVE_READONLY_SOURCE=auto` は、次の順で安全に実行方法を選びます。
 
-1. ホスト環境変数に2件のlive cookieがあればそれを使う
-2. 既存アカウントのIDまたはユーザー名が指定されていればそれを使う
-3. smokeユーザーにactive XAccountが2件以上あれば先頭2件を使う
-4. APIコンテナ環境変数に2件のlive cookieがあればそれを使う
-5. 何も準備できていない場合は非表示入力のcookieプロンプトに戻る
+1. ホスト環境変数に2件のlive cookieがあれば使う
+2. 既存アカウントのIDまたはユーザー名が指定されていれば使う
+3. smokeユーザーに `active` な `XAccount` が2件以上あれば先頭2件を使う
+4. APIコンテナ環境変数に2件のlive cookieがあれば使う
+5. 準備不足ならTTY環境ではCookie入力を促し、非TTY環境では終了する
 
-非TTYのヘッドレス実行ではcookieプロンプトを開かず、必要な準備を表示して終了します。
-CIやVPSの自動確認では `XACTIONS_LIVE_READONLY_SOURCE=diagnose` を使うと、cookieを出力せずに不足条件だけ確認できます。
-
-登録済み active XAccount 2件を使う場合:
+非TTYのヘッドレス確認ではCookie入力プロンプトを開きません。準備状態だけを確認する場合は次を使います。
 
 ```bash
-XACTIONS_LIVE_READONLY_SOURCE='existing' \
-bash /tmp/xactions-live-readonly.sh
+XACTIONS_LIVE_READONLY_SOURCE='diagnose' bash /tmp/xactions-live-readonly.sh
 ```
 
-Cookieを入力せずに実行条件だけ確認する場合:
+## 既存XAccountを明示する
+
+`/console` から実Xアカウントを2つ登録済みなら、Cookieを渡さずにアカウントIDだけで同じsmokeを実行できます。この場合、既存アカウント自体は削除されず、テスト中に作成した予約、実行履歴、Operationだけを削除します。
 
 ```bash
-XACTIONS_LIVE_READONLY_SOURCE='diagnose' \
-bash /tmp/xactions-live-readonly.sh
-```
-
-## VPSで実行する
-
-PowerShellからVPSへ入ります。
-
-```powershell
-ssh root@100.114.184.59
-```
-
-VPS上でCookieを非表示入力し、APIコンテナ内でスモークを実行します。
-
-```bash
-set -euo pipefail
-
-api="$(docker ps --format '{{.Names}}' | grep '^api-sg008w80csw08skkwcwswwgw' | head -n 1)"
-test -n "$api"
-
-read -rsp 'X Cookie A: ' COOKIE_A
-echo
-read -rsp 'X Cookie B: ' COOKIE_B
-echo
-
-docker exec \
-  -e XACTIONS_BASE_URL='https://xactions.logence.co.jp' \
-  -e XACTIONS_SMOKE_USERNAME='test_account_20260521092255' \
-  -e XACTIONS_LIVE_ACCOUNT_A_COOKIE="$COOKIE_A" \
-  -e XACTIONS_LIVE_ACCOUNT_B_COOKIE="$COOKIE_B" \
-  -e XACTIONS_LIVE_PROFILE_TARGET='x' \
-  "$api" npm run smoke:console-live-readonly
-
-unset COOKIE_A COOKIE_B
-```
-
-### 既存 XAccount ID を使う場合
-
-`/console` から実 X アカウントを2つ登録済みなら、Cookieを渡さずに
-アカウントIDだけで同じ smoke を実行できます。この場合、既存アカウントは削除せず、
-テスト中に作成した予約、実行履歴、Operation だけを削除します。
-
-```bash
-set -euo pipefail
-
-api="$(docker ps --format '{{.Names}}' | grep '^api-sg008w80csw08skkwcwswwgw' | head -n 1)"
-test -n "$api"
-
 docker exec \
   -e XACTIONS_BASE_URL='https://xactions.logence.co.jp' \
   -e XACTIONS_SMOKE_USERNAME='test_account_20260521092255' \
@@ -147,7 +93,7 @@ docker exec \
   "$api" npm run smoke:console-live-readonly
 ```
 
-登録済みの active アカウントからデフォルト優先で2件を使う場合は、明示フラグを付けます。
+登録済みの `active` アカウントからデフォルト優先で2件を使う場合は、次を使います。
 
 ```bash
 docker exec \
@@ -158,16 +104,18 @@ docker exec \
   "$api" npm run smoke:console-live-readonly
 ```
 
-成功時はJSONで `ok: true` が出ます。重要な確認点は次の通りです。
+## 成功条件
+
+成功時はJSONに `ok: true` が出ます。主要な確認点は次の通りです。
 
 - `accounts` が2件あり、両方 `status: "active"`
 - `immediate.operations` が2件あり、両方 `status: "completed"`
 - `schedules` が2件あり、両方 `mode: "live"`
 - `scheduledRuns` が2件あり、`status` と `operationStatus` が両方 `completed`
 - `historyCount` が1以上
-- `accountDeletes` が2件あり、両方 `deleted: true`
+- Cookieで作成した一時アカウントを使った場合、`accountDeletes` が2件あり、両方 `deleted: true`
 
-## 失敗したとき
+## 失敗時
 
 `/api/accounts` の登録で失敗する場合は、Cookie期限切れ、ログイン追加確認、2FA、X側の一時制限、ヘッドレス環境でのブロックが主な原因です。別ブラウザでXにログインし直し、新しいCookieで再実行してください。
 
@@ -179,7 +127,7 @@ worker="$(docker ps --format '{{.Names}}' | grep '^worker-sg008w80csw08skkwcwsww
 docker logs --tail 200 "$worker"
 ```
 
-スクリプトは `finally` でテストデータを削除します。中断などで残った場合も、次回実行時に24時間超の `smoke_live_readonly_` データを掃除します。
+スクリプトは `finally` でテストデータを削除します。中断などで残った場合も、次回実行時に24時間超過の `smoke_live_readonly_` データを掃除します。
 
 ## ローカルで構文だけ確認する
 

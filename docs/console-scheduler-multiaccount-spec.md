@@ -1,54 +1,55 @@
 # XActions Console / Schedule / Multi Account Specification
 
 作成日: 2026-05-21
+更新日: 2026-05-22
 
 ## 目的
 
-XActions を「機能はあるが探しにくいツール群」から、「X に近い操作感の日本語管理コンソール」に作り替える。
+XActionsを「機能はあるが探しにくいツール群」から、「Xに近い操作感の日本語管理コンソール」に作り替える。
 
-目標は次の 3 つ。
+目標は次の3つ。
 
-1. すべての機能に簡単にアクセスできること
+1. すべての機能へ簡単にアクセスできること
 2. 各機能で「何ができるか」「必要な設定」「実行履歴」が同じ導線で分かること
-3. 複数 X アカウントとスケジュール実行に対応すること
+3. 複数Xアカウントとスケジュール実行に対応すること
 
 ## 非目的
 
-- X の CAPTCHA、2FA、アカウントロックを回避する実装はしない
-- X の利用規約に反する大量実行を助長する UI にはしない
+- XのCAPTCHA、2FA、アカウントロックを回避する実装はしない
+- Xの利用規約に反する大量実行を助長するUIにはしない
 - 既存ページを一気に削除しない
-- 初期実装で React / Next.js などの大規模移行はしない
+- 初期実装でReact / Next.jsなどへの大規模移行はしない
 
-## 現状
+## 現状の課題
 
 ### UI
 
-- `/dashboard` は英語中心で、OSS 宣伝・説明文・開発者向け表現が多い
-- `/actions` に Like / Follow / DM があるが、ダッシュボードから見つけにくかった
+- `/dashboard` は英語中心で、OSS宣伝、説明文、開発者向け表現が多い
+- `/actions` にLike / Follow / DMがあるが、ダッシュボードから見つけにくい
 - 機能ごとに設定と履歴を見る導線が統一されていない
-- ページが多数あり、全体像が分かりづらい
+- ページが複数あり、全体像が分かりづらい
 
 ### API / worker
 
 - `Operation` は実行履歴として使える
-- Bull / Redis の `queueJob` がある
-- `targetEngage`, `likeTweet`, `unlikeTweet`, `sendDM` は worker 処理に接続済み
-- `posting`, `discovery`, `settings`, `bookmarks`, `creator`, `spaces` などは API ルートはあるが、すべての job type が worker で実処理できるとは限らない
-- `schedule.js` は CLI scheduler ベースで、ユーザー別・DB 永続・UI 操作向けではない
-- `UnfollowerSchedule` は unfollower scan 専用
+- Bull / Redisの `queueJob` がある
+- `targetEngage`, `likeTweet`, `unlikeTweet`, `sendDM` はworker処理に接続済み
+- `posting`, `discovery`, `settings`, `bookmarks`, `creator`, `spaces` などはAPIルートがあるが、すべてのjob typeがworkerで実処理できるとは限らない
+- 既存の `schedule.js` はCLI schedulerベースで、ユーザー別、DB永続、UI操作向けではない
+- `UnfollowerSchedule` はunfollower scan専用
 
 ### アカウント
 
-- 現状は `User.sessionCookie` 1 個が中心
-- 複数 X アカウント、アカウント別履歴、アカウント別セッション状態は未対応
+- 従来は `User.sessionCookie` 1件が中心
+- 複数Xアカウント、アカウント別履歴、アカウント別セッション状態は未対応だった
 
 ## 基本方針
 
-新しい中心画面として `/console` を作る。既存ページは残し、段階的に `/console` に統合する。
+新しい中心画面として `/console` を作る。既存ページは残し、段階的に `/console` へ統合する。
 
-UI は X 風の黒基調、細い境界線、タイムラインに近い密度を維持する。ただしコピーは日本語で短くし、AI っぽい説明文や開発者向けの言葉を消す。
+UIはX風の黒基調、細い境界線、タイムラインに近い密度を維持する。ただしコピーは日本語で短くし、AIっぽい説明文や開発者向けの言葉を削る。
 
-技術面では、まず既存の静的 HTML / Vanilla JS / Express / Prisma / Bull を活かす。フロントエンドフレームワーク導入は後回しにする。
+技術面では、まず既存の静的HTML / Vanilla JS / Express / Prisma / Bullを活かす。フロントエンドフレームワーク導入は後回しにする。
 
 ## 情報設計
 
@@ -68,9 +69,9 @@ UI は X 風の黒基調、細い境界線、タイムラインに近い密度�
 
 ### 画面レイアウト
 
-3 カラム構成を基本にする。
+3カラム構成を基本にする。
 
-- 左: カテゴリナビ、アカウント切替
+- 左: カテゴリナビ、Xアカウント切替
 - 中央: 機能一覧、履歴タイムライン
 - 右: 選択中機能の設定、予約、直近履歴
 
@@ -78,7 +79,9 @@ UI は X 風の黒基調、細い境界線、タイムラインに近い密度�
 
 ## 機能カタログ
 
-すべての機能を `Feature Catalog` として定義する。UI はこのカタログを読み、機能一覧・設定フォーム・履歴フィルタを生成する。
+すべての機能を `Feature Catalog` として定義する。UIはこのカタログを読み、機能一覧、設定フォーム、予約フォーム、履歴フィルタを生成する。
+
+例:
 
 ```js
 {
@@ -87,6 +90,7 @@ UI は X 風の黒基調、細い境界線、タイムラインに近い密度�
   title: 'DM送信',
   summary: '指定したユーザーに1通のDMを送ります。',
   operationType: 'sendDM',
+  queueType: 'sendDM',
   endpoint: '/api/messages/send',
   method: 'POST',
   authRequired: true,
@@ -105,12 +109,12 @@ UI は X 風の黒基調、細い境界線、タイムラインに近い密度�
 
 #### アクション
 
-- 指定ユーザーに Like / Follow / DM
-- ツイートに Like
-- Like 解除
+- 指定ユーザーにLike / Follow / DM
+- 投稿にLike
+- Like解除
 - 返信
 - ブックマーク
-- 自動 Like
+- 自動Like
 - エンゲージャーフォロー
 - キーワードフォロー
 - 自動コメント
@@ -132,7 +136,7 @@ UI は X 風の黒基調、細い境界線、タイムラインに近い密度�
 
 #### フォロワー
 
-- フォロバなし解除
+- フォロワーでない人を解除
 - 全解除
 - アンフォロー検出
 - フォロワースキャン
@@ -177,8 +181,8 @@ UI は X 風の黒基調、細い境界線、タイムラインに近い密度�
 
 - ワークフロー
 - スケジュール実行
-- Webhook 実行
-- AI エージェント
+- Webhook実行
+- AIエージェント
 - 自動化プリセット
 
 #### データ
@@ -190,7 +194,7 @@ UI は X 風の黒基調、細い境界線、タイムラインに近い密度�
 
 #### 設定
 
-- X アカウント連携
+- Xアカウント連携
 - 複数アカウント管理
 - セッション更新
 - プロフィール更新
@@ -203,7 +207,7 @@ UI は X 風の黒基調、細い境界線、タイムラインに近い密度�
 
 開発者用語を避ける。
 
-| 現在 | 新しい表記 |
+| 従来表現 | 新しい表現 |
 | --- | --- |
 | Dashboard | ホーム |
 | Operations | 実行 |
@@ -219,28 +223,23 @@ UI は X 風の黒基調、細い境界線、タイムラインに近い密度�
 | Completed | 完了 |
 | Processing | 実行中 |
 
-説明文は短くする。
+説明文は短くする。例:
 
-悪い例:
-
-> AI-powered X/Twitter automation toolkit for growth and engagement.
-
-良い例:
-
-> 指定したユーザーにDMを送ります。
+- 避ける: `AI-powered X/Twitter automation toolkit for growth and engagement.`
+- 使う: `指定したユーザーにDMを送ります。`
 
 ## 複数アカウント仕様
 
 ### 要件
 
-- 1つの XActions ユーザーが複数の X アカウントを登録できる
-- 各 X アカウントの session cookie は暗号化して保存する
+- 1つのXActionsユーザーが複数のXアカウントを登録できる
+- 各Xアカウントのsession cookieは暗号化して保存する
 - 実行時は必ず `accountId` を指定する
 - デフォルトアカウントを設定できる
 - アカウントごとに履歴、予約、セッション状態を見られる
 - セッション切れのアカウントは実行前に止める
 
-### Prisma 追加案
+### Prisma
 
 ```prisma
 model XAccount {
@@ -270,7 +269,7 @@ model XAccount {
 }
 ```
 
-`User.sessionCookie` は互換用として残す。新規 UI は `XAccount` を使う。移行時に既存 cookie があれば default account を作る。
+`User.sessionCookie` は互換用として残す。新UIは `XAccount` を使う。移行時に既存cookieがあればdefault accountを作る。
 
 ### API
 
@@ -283,21 +282,21 @@ model XAccount {
 
 ### 実行時ルール
 
-- job data に暗号化 cookie も復号済み cookie も入れない
-- worker は `accountId` から DB を引き、実行直前に復号する
+- job dataに暗号化cookieや復号済みcookieを入れない
+- workerは `accountId` からDBを引き、実行直前に復号する
 - `Operation` に `accountId` を記録する
-- 同一 `accountId` の live 操作は同時実行 1 本までにする
+- 同一 `accountId` のlive操作は同時実行1本までにする
 
 ## スケジュール実行仕様
 
 ### 要件
 
-- すべての対応機能で「今すぐ実行」と「予約」を選べる
-- 予約は DB に保存され、worker 再起動後も残る
+- 対応機能では「今すぐ実行」と「予約」を選べる
+- 予約はDBに保存され、worker再起動後も残る
 - 予約実行は `Operation` として履歴に残る
 - 予約ごとに有効 / 停止を切り替えられる
 - 失敗時は再試行し、最終失敗理由を残す
-- タイムゾーンは初期値 `Asia/Tokyo`
+- タイムゾーン初期値は `Asia/Tokyo`
 
 ### 予約タイプ
 
@@ -305,44 +304,44 @@ model XAccount {
 - 毎日
 - 毎週
 - 指定間隔
-- cron 上級設定
+- cron上級設定
 
-### Prisma 追加案
+### Prisma
 
 ```prisma
 model ScheduledAction {
-  id             String   @id @default(cuid())
-  userId         String
-  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  accountId      String?
-  account        XAccount? @relation(fields: [accountId], references: [id], onDelete: SetNull)
+  id              String   @id @default(cuid())
+  userId          String
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accountId       String?
+  account         XAccount? @relation(fields: [accountId], references: [id], onDelete: SetNull)
 
-  name           String
-  featureId      String
-  operationType  String
-  config         String   @db.Text
-  mode           String   @default("dryRun") // dryRun, live
+  name            String
+  featureId       String
+  operationType   String
+  config          String   @db.Text
+  mode            String   @default("dryRun") // dryRun, live
 
-  scheduleType   String   // once, daily, weekly, interval, cron
-  cron           String?
+  scheduleType    String   // once, daily, weekly, interval, cron
+  cron            String?
   intervalMinutes Int?
-  runAt          DateTime?
-  daysOfWeek     String?
-  timezone       String   @default("Asia/Tokyo")
+  runAt           DateTime?
+  daysOfWeek      String?
+  timezone        String   @default("Asia/Tokyo")
 
-  status         String   @default("active") // active, paused, completed, failed
-  nextRunAt      DateTime?
-  lastRunAt      DateTime?
-  lockedAt       DateTime?
-  lockedBy       String?
-  maxRetries     Int      @default(2)
-  failureCount   Int      @default(0)
-  lastError      String?
+  status          String   @default("active") // active, paused, completed, failed
+  nextRunAt       DateTime?
+  lastRunAt       DateTime?
+  lockedAt        DateTime?
+  lockedBy        String?
+  maxRetries      Int      @default(2)
+  failureCount    Int      @default(0)
+  lastError       String?
 
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 
-  runs           ScheduledActionRun[]
+  runs            ScheduledActionRun[]
 
   @@index([userId, status])
   @@index([status, nextRunAt])
@@ -380,12 +379,12 @@ batchId           String?
 
 ### Scheduler Worker
 
-worker に 30 秒または 60 秒間隔の scheduler loop を追加する。
+workerに30秒または60秒間隔のscheduler loopを追加する。
 
 流れ:
 
 1. `ScheduledAction` から `status=active` かつ `nextRunAt <= now` を取得
-2. transaction で `lockedAt`, `lockedBy` を設定して claim
+2. transactionで `lockedAt`, `lockedBy` を設定してclaim
 3. `ScheduledActionRun` を作成
 4. `Operation` を作成
 5. `queueJob` に投入
@@ -394,9 +393,9 @@ worker に 30 秒または 60 秒間隔の scheduler loop を追加する。
 
 同時実行対策:
 
-- `lockedAt` が新しい予約は他 worker が拾わない
-- 古い lock は 10 分で stale とみなす
-- 同一 account の live action は直列化する
+- `lockedAt` が新しい予約は他workerが触らない
+- 古いlockは10分でstaleとみなす
+- 同一accountのlive actionは直列化する
 
 ### API
 
@@ -417,7 +416,7 @@ worker に 30 秒または 60 秒間隔の scheduler loop を追加する。
 - 今すぐ
 - 予約
 
-予約を選ぶと以下を表示。
+予約を選ぶと次を表示する。
 
 - 実行アカウント
 - 予約タイプ
@@ -426,9 +425,9 @@ worker に 30 秒または 60 秒間隔の scheduler loop を追加する。
 - 失敗時の再試行回数
 - 保存ボタン
 
-## 統一実行 API
+## 統一実行API
 
-個別 API を残しつつ、新 UI からは統一 API を使う。
+個別APIを残しつつ、新UIからは統一APIを使う。
 
 `POST /api/console/actions/execute`
 
@@ -470,13 +469,13 @@ worker に 30 秒または 60 秒間隔の scheduler loop を追加する。
 ### 要件
 
 - 1つの機能を複数アカウントで実行できる
-- アカウントごとに子 operation を作る
-- 親 operation で全体進捗を見る
-- 失敗アカウントだけ再実行できる
+- アカウントごとに子operationを作る
+- 親operationで全体進捗を見る
+- 失敗したアカウントだけ再実行できる
 
 ### 仕様
 
-`accountIds` が複数の場合、親 job を作る。
+`accountIds` が複数の場合、親jobを作る。
 
 ```json
 {
@@ -487,68 +486,66 @@ worker に 30 秒または 60 秒間隔の scheduler loop を追加する。
 }
 ```
 
-worker は account ごとに child operation を作る。
-
 制限:
 
-- 初期値は同時 1 アカウント
-- 設定で最大 2 まで
-- DM や follow の live 実行は連続実行間隔を強制する
+- 初期値は同時1アカウント
+- 設定で最大2件まで
+- DMやfollowのlive実行は連続実行間隔を強制する
 
 ## 実装フェーズ
 
 ### Phase 0: 棚卸し
 
-- 既存 API / job type / worker processor を一覧化
+- 既存API / job type / worker processorを一覧化
 - 機能ごとに `利用可能`, `APIあり`, `worker未実装`, `UI未接続` を分類
-- Feature Catalog の初版を作る
+- Feature Catalogの初期版を作る
 
 成果物:
 
 - `api/config/features.js`
 - `dashboard/console.html`
 
-### Phase 1: DB 基盤
+### Phase 1: DB基盤
 
 - `XAccount`
 - `ScheduledAction`
 - `ScheduledActionRun`
 - `Operation` 拡張
-- 既存 `User.sessionCookie` から default `XAccount` を作る移行処理
+- 既存 `User.sessionCookie` からdefault `XAccount` を作る移行処理
 
 注意:
 
-現在 `prisma/migrations` が実質ないため、本番 DB の baseline が必要。
+現在 `prisma/migrations` が実質的でないため、本番DBのbaselineが必要。
 
 推奨手順:
 
-1. 現在の本番 DB と schema.prisma を比較
-2. baseline migration を作成
+1. 現在の本番DBと `schema.prisma` を比較
+2. baseline migrationを作成
 3. 本番で `prisma migrate resolve --applied` を実行
-4. 以後は通常の migration を commit する
-5. `.gitignore` の `prisma/migrations/*/migration.sql` を外す
+4. 以後の通常migrationをcommitする
+5. `.gitignore` の `prisma/migrations/*/migration.sql` を見直す
 
 ### Phase 2: 複数アカウント
 
-- account API 実装
-- session cookie 暗号化を `XAccount` に移動
+- account API実装
+- session cookie暗号化を `XAccount` に移動
 - `getDecryptedSessionCookie(userId)` を `getDecryptedAccountCookie(accountId, userId)` に拡張
-- UI にアカウント切替を追加
+- UIにアカウント切替を追加
 - 既存 `/api/session/*` は互換用として残す
 
 ### Phase 3: 統一実行
 
-- Feature Catalog をもとに入力検証
-- `featureId` から operation type / worker type を解決
+- Feature Catalogをもとに入力検証
+- `featureId` からoperation type / worker typeを解決
 - `accountId` 必須化
 - `Operation.accountId` に保存
-- 既存 `/api/actions/target` は内部で統一実行に寄せる
+- 既存 `/api/actions/target` は内部で統一実行へ寄せる
 
 ### Phase 4: スケジューラ
 
-- `scheduledActionScheduler.js` を worker に追加
-- due schedule claim 処理
-- nextRunAt 計算
+- `scheduledActionScheduler.js` をworkerに追加
+- due schedule claim処理
+- nextRunAt計算
 - run-now / pause / resume API
 - 実行結果反映
 
@@ -565,36 +562,36 @@ worker は account ごとに child operation を作る。
 
 ### Phase 6: 機能接続
 
-優先順位:
+優先順:
 
 1. DM送信
 2. targetEngage
 3. like / unlike
-4. unfollow 系
+4. unfollow系
 5. follower scan
-6. posting 系
-7. scrape / analytics 系
-8. workflow / agent 系
+6. posting系
+7. scrape / analytics系
+8. workflow / agent系
 
-worker 未実装の job type は、UI では `準備中` にせず、実装してから `利用可能` にする。
+worker未実装のjob typeはUIで `準備中` にせず、実装してから `利用可能` にする。
 
 ### Phase 7: 本番移行
 
-- staging または本番 DB バックアップ
-- migration 実行
+- 本番DBバックアップ
+- migration実行
 - Coolify deploy
 - health check
 - API smoke test
-- scheduler loop 起動確認
-- 予約 dry-run test
-- 複数アカウント追加 test
+- scheduler loop起動確認
+- 予約dry-run test
+- 複数アカウント追加test
 
 ## テスト計画
 
 ### Unit
 
-- cron / interval / daily / weekly の nextRunAt
-- timezone 変換
+- cron / interval / daily / weeklyのnextRunAt
+- timezone変換
 - Feature Catalog validation
 - account cookie parse
 - schedule claim lock
@@ -625,60 +622,100 @@ worker 未実装の job type は、UI では `準備中` にせず、実装し�
 - `/api/scheduled-actions`
 - worker container up
 - scheduler log
+- worker restart recovery
+- live readonly smoke
 
 ## セキュリティ
 
-- cookie は必ず暗号化保存
-- job payload に cookie を入れない
-- logs に cookie / token / DM本文全文を出さない
-- DM本文は operation config に保存しない。保存する場合は preview のみ
-- account delete 時は関連 schedule を pause または削除
-- live action は確認モーダルを出す
-- 大量実行は上限を設定する
+- cookieは必ず暗号化保存する
+- job payloadにcookieを入れない
+- logsにcookie / token / DM本文を出さない
+- DM本文はoperation configに保存しない。保存する場合はpreviewのみ
+- account delete時は関連scheduleをpauseまたは削除する
+- live actionは確認モーダルを出す
+- 大量実行の上限を設定する
 
-## UI 品質基準
+## UI品質基準
 
 - すべて日本語
-- 1画面に説明文を詰め込まない
-- 機能説明は 1 行から 2 行
+- 1画面に説明文を詰め込みすぎない
+- 機能説明は1行から2行
 - ボタン文言は短くする
 - 状態表示は `未連携`, `確認のみ`, `予約済み`, `実行中`, `完了`, `失敗`
 - 失敗時は原因と次の操作を出す
 - クリックできるものは見た目で分かる
-- 履歴は機能別・アカウント別に絞れる
+- 履歴は機能別、アカウント別に絞れる
 
 ## 受け入れ条件
 
 - ユーザーが `/console` から全カテゴリを見られる
 - 各機能をクリックすると概要、設定、予約、履歴が見える
-- X アカウントを 2 つ以上登録できる
+- Xアカウントを2つ以上登録できる
 - 実行時にアカウントを選べる
-- 予約が DB に残り、再起動後も実行される
-- 予約実行が Operation 履歴に残る
+- 予約がDBに残り、再起動後も実行される
+- 予約実行がOperation履歴に残る
 - 失敗した実行の理由が見える
-- worker が停止しても再起動後に未実行予約を拾う
-- session expired のアカウントは UI で分かる
-- 本番 Coolify で API / worker / scheduler が起動する
+- workerが停止しても、再起動後に未実行予約を拾う
+- session expiredのアカウントがUIで分かる
+- 本番CoolifyでAPI / worker / schedulerが起動する
+- 実Xアカウント2件でlive readonly smokeが通る
 
-## リスク
+## 現在の実装状況
 
-- X の DOM 変更で Puppeteer selector が壊れる
-- CAPTCHA / 2FA が出ると自動実行できない
-- Prisma migration baseline が必要
-- 既存 API の中に worker 未接続のものがある
-- 複数アカウント live 実行はレート制限とアカウント安全性に注意が必要
-- session cookie の取り扱いは漏洩リスクが高い
+2026-05-22時点で、次は実装済み。
 
-## 最短 MVP
+- `/console` の日本語コンソール
+- `/dashboard` から `/console` への導線
+- `/classic-dashboard` に旧ダッシュボードを退避
+- Feature Catalog 47機能
+- 各機能の設定、予約、履歴タブ
+- select / multiSelectによる日本語選択肢
+- DM送信を専用 `sendDM` workerへ接続
+- 全カタログ機能のworker到達性監査
+- `XAccount` による複数アカウント管理
+- account CRUD / verify / default
+- 最大2アカウントの明示選択
+- アカウント別履歴、アカウント別予約フィルタ
+- session expired表示と関連schedule pause
+- `ScheduledAction` / `ScheduledActionRun`
+- once / daily / weekly / interval / cron
+- pause / resume / run-now
+- scheduler loop
+- stale lock recovery
+- worker restart recovery smoke
+- live action確認モーダル
+- queue payloadからcookie / token / DM本文を除外
+- legacy DM履歴の本文redaction
+- legacy operation responseのredaction
+- headless Chromium smoke
+- Coolify本番デプロイ
+
+2026-05-22時点で残っている完了ゲート。
+
+- 本番の `test_account_20260521092255` に実Xアカウントが0件のため、実Xアカウント2件を使う `live readonly smoke` は未実行
+
+実Xアカウント2件を登録したら、次で最終確認する。
+
+```bash
+api="$(docker ps --format '{{.Names}}' | grep '^api-sg008w80csw08skkwcwswwgw' | head -n 1)"
+docker cp "$api":/app/scripts/run-console-live-readonly-host.sh /tmp/xactions-live-readonly.sh
+XACTIONS_LIVE_READONLY_SOURCE='existing' bash /tmp/xactions-live-readonly.sh
+```
+
+Cookieから登録する場合は、次の手順書を使う。
+
+- `docs/console-live-smoke.md`
+
+## 最短MVP
 
 まず次だけ実装すれば、体験は大きく改善する。
 
 1. `/console` 新設
-2. Feature Catalog 初版
+2. Feature Catalog初期版
 3. `XAccount` 追加
-4. `targetEngage` と `sendDM` の accountId 対応
+4. `targetEngage` と `sendDM` のaccountId対応
 5. `ScheduledAction` 追加
 6. 1回だけ予約と毎日予約
 7. 機能別履歴
 
-この MVP 完了後に、全機能をカテゴリごとに接続していく。
+現在はMVPを超えて、全カテゴリ接続、複数アカウント、永続スケジュール、本番スモークまで進んでいる。最終完了には実Xアカウント2件でのlive readonly確認が必要。
