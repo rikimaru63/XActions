@@ -230,6 +230,77 @@ try {
   }
 
   const visitedFeatureTotal = categoryResults.reduce((total, category) => total + category.featureCount, 0);
+
+  await page.setViewport({ width: 390, height: 844, isMobile: true });
+  await page.goto(`${baseUrl}/console`, { waitUntil: 'networkidle2', timeout: 60000 });
+  await page.waitForSelector('#feature-list .feature-row', { timeout: 30000 });
+  await page.waitForSelector('#detail-toggle', { timeout: 30000 });
+
+  const mobileInitial = await page.evaluate(() => {
+    const detail = document.querySelector('#detail');
+    const toggle = document.querySelector('#detail-toggle');
+    const rect = detail?.getBoundingClientRect();
+    return {
+      open: detail?.classList.contains('open') || false,
+      toggleText: toggle?.textContent?.trim() || '',
+      top: rect?.top || 0,
+      innerHeight: window.innerHeight,
+    };
+  });
+
+  await page.click('#feature-list .feature-row');
+  await page.waitForFunction(() => document.querySelector('#detail')?.classList.contains('open'));
+  const mobileAfterFeatureClick = await page.evaluate(() => {
+    const detail = document.querySelector('#detail');
+    const toggle = document.querySelector('#detail-toggle');
+    const rect = detail?.getBoundingClientRect();
+    return {
+      open: detail?.classList.contains('open') || false,
+      toggleText: toggle?.textContent?.trim() || '',
+      top: rect?.top || 0,
+      innerHeight: window.innerHeight,
+    };
+  });
+
+  await page.click('#detail-toggle');
+  await page.waitForFunction(() => !document.querySelector('#detail')?.classList.contains('open'));
+  const mobileAfterClose = await page.evaluate(() => {
+    const detail = document.querySelector('#detail');
+    const toggle = document.querySelector('#detail-toggle');
+    const rect = detail?.getBoundingClientRect();
+    return {
+      open: detail?.classList.contains('open') || false,
+      toggleText: toggle?.textContent?.trim() || '',
+      top: rect?.top || 0,
+      innerHeight: window.innerHeight,
+    };
+  });
+
+  await page.click('#detail-toggle');
+  await page.waitForFunction(() => document.querySelector('#detail')?.classList.contains('open'));
+  const mobileAfterReopen = await page.evaluate(() => {
+    const detail = document.querySelector('#detail');
+    const toggle = document.querySelector('#detail-toggle');
+    const rect = detail?.getBoundingClientRect();
+    return {
+      open: detail?.classList.contains('open') || false,
+      toggleText: toggle?.textContent?.trim() || '',
+      top: rect?.top || 0,
+      innerHeight: window.innerHeight,
+    };
+  });
+
+  const mobileSheet = {
+    initial: mobileInitial,
+    afterFeatureClick: mobileAfterFeatureClick,
+    afterClose: mobileAfterClose,
+    afterReopen: mobileAfterReopen,
+    closedPeekVisible: mobileInitial.top >= mobileInitial.innerHeight - 96
+      && mobileAfterClose.top >= mobileAfterClose.innerHeight - 96,
+    openSheetVisible: mobileAfterFeatureClick.top < mobileAfterFeatureClick.innerHeight * 0.45
+      && mobileAfterReopen.top < mobileAfterReopen.innerHeight * 0.45,
+  };
+
   const blockingBadResponses = badResponses.filter((item) => !isIgnorableBadResponse(item));
   const blockingConsoleErrors = consoleErrors.filter((item) => !item.includes('Failed to load resource'));
   const ok = result.title.includes('コンソール')
@@ -254,6 +325,16 @@ try {
     && result.tabs.includes('設定')
     && result.tabs.includes('予約')
     && result.tabs.includes('履歴')
+    && mobileSheet.initial.open === false
+    && mobileSheet.initial.toggleText === '開く'
+    && mobileSheet.afterFeatureClick.open === true
+    && mobileSheet.afterFeatureClick.toggleText === '閉じる'
+    && mobileSheet.afterClose.open === false
+    && mobileSheet.afterClose.toggleText === '開く'
+    && mobileSheet.afterReopen.open === true
+    && mobileSheet.afterReopen.toggleText === '閉じる'
+    && mobileSheet.closedPeekVisible
+    && mobileSheet.openSheetVisible
     && pageErrors.length === 0
     && blockingConsoleErrors.length === 0
     && blockingBadResponses.length === 0
@@ -264,6 +345,7 @@ try {
     baseUrl,
     result,
     confirmation,
+    mobileSheet,
     categoryResults,
     visitedFeatureTotal,
     pageErrors,

@@ -457,7 +457,9 @@ function auditUi() {
     'data-schedule-mode="dryRun"',
     'data-schedule-mode="live"',
     'id="confirm-modal"',
+    'id="detail-toggle"',
     'function requestConfirmation',
+    'function updateDetailSheet',
     '<html lang="ja">',
   ];
   const missing = requiredSnippets.filter((snippet) => !html.includes(snippet));
