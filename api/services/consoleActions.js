@@ -35,10 +35,15 @@ function sanitizeConfig(value) {
 function sanitizeOperation(operation) {
   const config = sanitizeConfig(parseJson(operation.config));
   const result = parseJson(operation.result);
+  const childOperations = Array.isArray(operation.childOperations)
+    ? operation.childOperations.map((child) => sanitizeOperation(child))
+    : undefined;
+
   return {
     ...operation,
     config,
     result,
+    ...(childOperations ? { childOperations } : {}),
   };
 }
 

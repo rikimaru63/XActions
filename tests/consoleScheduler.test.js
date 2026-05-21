@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { getFeatureById, getPublicFeatureCatalog } from '../api/config/features.js';
 import { createActionPayload } from '../api/services/consoleActions.js';
+import { summarizeChildStatuses } from '../api/services/operationBatches.js';
 import { calculateNextRunAt } from '../api/services/scheduleUtils.js';
 
 describe('console scheduler helpers', () => {
@@ -48,6 +49,24 @@ describe('console scheduler helpers', () => {
       title: 'X連携',
       status: 'available',
       statusLabel: '利用可能',
+    });
+  });
+
+  it('summarizes multi-account child operations for parent history', () => {
+    const summary = summarizeChildStatuses([
+      { status: 'completed' },
+      { status: 'failed' },
+    ]);
+
+    expect(summary).toMatchObject({
+      status: 'failed',
+      terminal: true,
+      error: '1件のアカウントで失敗しました。',
+      counts: {
+        total: 2,
+        completed: 1,
+        failed: 1,
+      },
     });
   });
 });

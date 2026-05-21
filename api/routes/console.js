@@ -10,6 +10,7 @@ import {
 } from '../config/features.js';
 import {
   createActionPayload,
+  parseJson,
   sanitizeOperation,
 } from '../services/consoleActions.js';
 import { listAccountsForUser } from '../services/accountStore.js';
@@ -50,6 +51,113 @@ async function resolveExecutionAccounts(req, feature) {
   }
 
   return [...new Set(requested)];
+}
+
+function configFromOperation(featureId, operationConfig = {}, overrideConfig = {}) {
+  const config = { ...operationConfig, ...overrideConfig };
+
+  if (featureId === 'sendDM') {
+    return {
+      username: overrideConfig.username || overrideConfig.targetUsername || operationConfig.targetUsername,
+      message: overrideConfig.message || overrideConfig.dmMessage,
+      delayMs: overrideConfig.delayMs ?? operationConfig.delayMs,
+    };
+  }
+
+  if (featureId === 'targetEngage') {
+    return {
+      targetUsername: overrideConfig.targetUsername || operationConfig.targetUsername,
+      likeCount: overrideConfig.likeCount ?? operationConfig.likeCount,
+      follow: overrideConfig.follow ?? operationConfig.follow,
+      dmMessage: overrideConfig.dmMessage || overrideConfig.message || '',
+      delayMs: overrideConfig.delayMs ?? operationConfig.delayMs,
+    };
+  }
+
+  if (featureId === 'likeTweet' || featureId === 'unlikeTweet') {
+    return {
+      tweetUrl: overrideConfig.tweetUrl || operationConfig.tweetUrl,
+      tweetId: overrideConfig.tweetId || operationConfig.tweetId,
+    };
+  }
+
+  if (featureId === 'autoLike') {
+    return {
+      query: overrideConfig.query ?? operationConfig.query,
+      targetUsername: overrideConfig.targetUsername ?? operationConfig.targetUsername,
+      maxLikes: overrideConfig.maxLikes ?? operationConfig.maxLikes,
+    };
+  }
+
+  if (featureId === 'detectUnfollowers') {
+    return {
+      username: overrideConfig.username ?? operationConfig.username,
+      maxUsers: overrideConfig.maxUsers ?? operationConfig.maxUsers,
+    };
+  }
+
+  return config;
+}
+
+async function queueConsoleOperations({ user, feature, payload, accountIds, mode, retryOf = null }) {
+  const batchId = accountIds.length > 1 || retryOf ? randomUUID() : null;
+  let parentOperation = null;
+
+  if (batchId) {
+    parentOperation = await prisma.operation.create({
+      data: {
+        userId: user.id,
+        batchId,
+        type: payload.operationType,
+        status: 'pending',
+        config: JSON.stringify({
+          ...payload.operationConfig,
+          sourceFeatureId: feature.id,
+          isBatch: true,
+          retryOf,
+          mode,
+          accountIds: accountIds.filter(Boolean),
+          childCount: accountIds.length,
+        }),
+      },
+    });
+  }
+
+  const operations = [];
+  for (const accountId of accountIds) {
+    const operation = await prisma.operation.create({
+      data: {
+        userId: user.id,
+        accountId,
+        parentOperationId: parentOperation?.id || null,
+        batchId,
+        type: payload.operationType,
+        status: 'pending',
+        config: JSON.stringify(payload.operationConfig),
+      },
+    });
+
+    await queueJob({
+      type: payload.operationType,
+      operationId: operation.id,
+      userId: user.id,
+      accountId,
+      authMethod: 'session',
+      config: payload.jobConfig,
+    });
+
+    operations.push({
+      operationId: operation.id,
+      accountId,
+    });
+  }
+
+  return {
+    operationId: parentOperation?.id || operations[0]?.operationId || null,
+    parentOperationId: parentOperation?.id || null,
+    operations,
+    batchId,
+  };
 }
 
 router.get('/features', (_req, res) => {
@@ -125,6 +233,30 @@ router.get('/history', async (req, res) => {
             status: true,
           },
         },
+        childOperations: {
+          select: {
+            id: true,
+            accountId: true,
+            type: true,
+            status: true,
+            error: true,
+            config: true,
+            result: true,
+            createdAt: true,
+            startedAt: true,
+            completedAt: true,
+            account: {
+              select: {
+                id: true,
+                username: true,
+                displayName: true,
+                status: true,
+                isDefault: true,
+              },
+            },
+          },
+          orderBy: { createdAt: 'asc' },
+        },
       },
       orderBy: { createdAt: 'desc' },
       take: sourceFeatureId === 'sendDM' ? Math.min(limit * 3, 100) : limit,
@@ -171,40 +303,16 @@ router.post('/actions/execute', async (req, res) => {
 
     const payload = createActionPayload(feature, config, mode, req.user);
     const accountIds = await resolveExecutionAccounts(req, feature);
-    const batchId = accountIds.length > 1 ? randomUUID() : null;
-    const operations = [];
-
-    for (const accountId of accountIds) {
-      const operation = await prisma.operation.create({
-        data: {
-          userId: req.user.id,
-          accountId,
-          batchId,
-          type: payload.operationType,
-          status: 'pending',
-          config: JSON.stringify(payload.operationConfig),
-        },
-      });
-
-      await queueJob({
-        type: payload.operationType,
-        operationId: operation.id,
-        userId: req.user.id,
-        accountId,
-        authMethod: 'session',
-        config: payload.jobConfig,
-      });
-
-      operations.push({
-        operationId: operation.id,
-        accountId,
-      });
-    }
+    const queued = await queueConsoleOperations({
+      user: req.user,
+      feature,
+      payload,
+      accountIds,
+      mode,
+    });
 
     res.json({
-      operationId: operations[0]?.operationId || null,
-      operations,
-      batchId,
+      ...queued,
       featureId: feature.id,
       status: 'queued',
       mode,
@@ -212,6 +320,66 @@ router.post('/actions/execute', async (req, res) => {
   } catch (error) {
     console.error('Console execute error:', error);
     res.status(error.statusCode || 400).json({ error: error.message || '実行を開始できませんでした。' });
+  }
+});
+
+router.post('/actions/retry-failed', async (req, res) => {
+  try {
+    const parentOperationId = req.body.parentOperationId || req.body.operationId;
+    if (!parentOperationId) {
+      return res.status(400).json({ error: '再実行する履歴を選択してください。' });
+    }
+
+    const parent = await prisma.operation.findFirst({
+      where: { id: parentOperationId, userId: req.user.id },
+      include: {
+        childOperations: {
+          where: { status: 'failed', accountId: { not: null } },
+          include: { account: true },
+        },
+      },
+    });
+
+    if (!parent) return res.status(404).json({ error: '履歴が見つかりません。' });
+    if (!parent.childOperations.length) {
+      return res.status(400).json({ error: '再実行できる失敗アカウントがありません。' });
+    }
+
+    const parentConfig = parseJson(parent.config) || {};
+    const feature = getFeatureById(req.body.featureId || parentConfig.sourceFeatureId);
+    if (!feature) return res.status(404).json({ error: '機能が見つかりません。' });
+
+    const failedAccounts = parent.childOperations
+      .filter((operation) => operation.account?.status === 'active')
+      .map((operation) => operation.accountId);
+
+    if (!failedAccounts.length) {
+      return res.status(400).json({ error: '失敗したXアカウントが実行できる状態ではありません。' });
+    }
+
+    const mode = req.body.mode === 'live' || parentConfig.mode === 'live' || parentConfig.dryRun === false ? 'live' : 'dryRun';
+    const retryConfig = configFromOperation(feature.id, parentConfig, req.body.config || {});
+    const payload = createActionPayload(feature, retryConfig, mode, req.user);
+    const queued = await queueConsoleOperations({
+      user: req.user,
+      feature,
+      payload,
+      accountIds: [...new Set(failedAccounts)],
+      mode,
+      retryOf: parent.id,
+    });
+
+    res.json({
+      ...queued,
+      featureId: feature.id,
+      status: 'queued',
+      mode,
+      retriedAccountCount: failedAccounts.length,
+      retryOf: parent.id,
+    });
+  } catch (error) {
+    console.error('Console retry failed accounts error:', error);
+    res.status(error.statusCode || 400).json({ error: error.message || '失敗分を再実行できませんでした。' });
   }
 });
 

@@ -20,6 +20,7 @@ import { targetEngageBrowser } from './operations/puppeteer/targetEngage.js';
 import browserAutomation from './browserAutomation.js';
 import { getDecryptedSessionCookie } from '../routes/session-auth.js';
 import { getDecryptedAccountCookie } from './accountStore.js';
+import { refreshParentOperationByChild } from './operationBatches.js';
 import { startScheduledActionScheduler } from './scheduledActions.js';
 
 const prisma = new PrismaClient();
@@ -531,6 +532,10 @@ operationsQueue.on('active', async (job) => {
       console.error(`Failed to mark scheduled run active: ${job.id}`, error);
     });
   }
+
+  await refreshParentOperationByChild(job.data.operationId).catch((error) => {
+    console.error(`Failed to update parent operation active state: ${job.id}`, error);
+  });
 });
 
 operationsQueue.on('completed', async (job, result) => {
@@ -545,6 +550,10 @@ operationsQueue.on('completed', async (job, result) => {
       completedAt: new Date(),
       result: toJsonString(result)
     }
+  });
+
+  await refreshParentOperationByChild(job.data.operationId).catch((error) => {
+    console.error(`Failed to update parent operation completion state: ${job.id}`, error);
   });
 
   if (job.data.scheduledActionRunId) {
@@ -592,6 +601,10 @@ operationsQueue.on('failed', async (job, err) => {
       error: err.message,
       retryCount: job.attemptsMade
     }
+  });
+
+  await refreshParentOperationByChild(job.data.operationId).catch((error) => {
+    console.error(`Failed to update parent operation failure state: ${job.id}`, error);
   });
 
   if (job.data.scheduledActionRunId) {

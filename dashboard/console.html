@@ -1391,6 +1391,7 @@
           return;
         }
         els.historyPanel.innerHTML = `
+          <div class="status"></div>
           <div class="history-list">
             ${data.operations.map((operation) => `
               <div class="history-item">
@@ -1401,11 +1402,20 @@
                   </div>
                   <span class="badge ${operation.status === 'completed' ? 'available' : operation.status === 'failed' ? 'high' : ''}">${escapeHtml(operation.type)}</span>
                 </div>
-                <div class="history-meta">${escapeHtml(operation.error || summarizeConfig(operation.config) || '処理待ち')}</div>
+                <div class="history-meta">${escapeHtml(historyDetail(operation))}</div>
+                ${childOperationSummary(operation)}
+                ${canRetryFailed(operation) ? `
+                  <div class="schedule-actions">
+                    <button type="button" data-retry-failed="${escapeHtml(operation.id)}">失敗分を再実行</button>
+                  </div>
+                ` : ''}
               </div>
             `).join('')}
           </div>
         `;
+        els.historyPanel.querySelectorAll('[data-retry-failed]').forEach((button) => {
+          button.addEventListener('click', () => retryFailedAccounts(button.dataset.retryFailed, selected));
+        });
       } catch (error) {
         els.historyPanel.innerHTML = `<div class="empty">${escapeHtml(error.message)}</div>`;
       }
@@ -1420,6 +1430,33 @@
       return parts.filter(Boolean).join(' / ');
     }
 
+    function historyDetail(operation) {
+      if (operation.error) return operation.error;
+      if (operation.result?.batch) {
+        return `完了 ${operation.result.completed || 0} / 失敗 ${operation.result.failed || 0} / 全体 ${operation.result.total || 0}`;
+      }
+      return summarizeConfig(operation.config) || '処理待ち';
+    }
+
+    function childOperationSummary(operation) {
+      if (!operation.childOperations?.length) return '';
+      return `
+        <div class="history-meta">
+          ${operation.childOperations.map((child) => {
+            const account = child.account?.username ? `@${child.account.username}` : 'アカウント未指定';
+            const error = child.error ? ` / ${child.error}` : '';
+            return escapeHtml(`${account}: ${jaStatus(child.status)}${error}`);
+          }).join('<br>')}
+        </div>
+      `;
+    }
+
+    function canRetryFailed(operation) {
+      return operation.config?.isBatch
+        && operation.status === 'failed'
+        && operation.childOperations?.some((child) => child.status === 'failed');
+    }
+
     function summarizeConfig(config) {
       if (!config) return '';
       if (config.targetUsername) return `@${config.targetUsername}`;
@@ -1427,6 +1464,29 @@
       if (config.tweetUrl) return config.tweetUrl;
       if (config.query) return config.query;
       return '';
+    }
+
+    async function retryFailedAccounts(parentOperationId, selected) {
+      if (state.mode === 'live') {
+        const ok = window.confirm('失敗したアカウントだけ再実行します。よろしいですか？');
+        if (!ok) return;
+      }
+
+      try {
+        const result = await apiRequest('/console/actions/retry-failed', {
+          method: 'POST',
+          body: JSON.stringify({
+            parentOperationId,
+            featureId: selected.id,
+            mode: state.mode,
+            config: collectConfig(selected),
+          }),
+        });
+        setStatus(els.historyPanel, `再実行を受け付けました: ${result.retriedAccountCount || 0}件`, 'ok');
+        await loadHistory();
+      } catch (error) {
+        setStatus(els.historyPanel, error.message, 'err');
+      }
     }
 
     function render() {
