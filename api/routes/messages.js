@@ -25,7 +25,11 @@ router.post('/send', async (req, res) => {
         userId: req.user.id,
         type: 'sendDM',
         status: 'pending',
-        config: JSON.stringify({ username, message }),
+        config: JSON.stringify({
+          username,
+          hasMessage: true,
+          messageLength: String(message).length,
+        }),
       },
     });
 

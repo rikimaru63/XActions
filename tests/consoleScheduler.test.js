@@ -304,6 +304,14 @@ describe('console scheduler helpers', () => {
     expect(JSON.stringify(jobData)).not.toContain('secret');
   });
 
+  it('keeps full DM text out of the legacy messages history config', () => {
+    const route = readFileSync(new URL('../api/routes/messages.js', import.meta.url), 'utf8');
+
+    expect(route).toContain('messageLength: String(message).length');
+    expect(route).toContain('hasMessage: true');
+    expect(route).not.toContain('config: JSON.stringify({ username, message })');
+  });
+
   it('detects X session expiration errors', () => {
     expect(isSessionExpiredError(new Error('Session expired - please reconnect your X account'))).toBe(true);
     expect(isSessionExpiredError('X連携情報でログイン状態を確認できませんでした。')).toBe(true);

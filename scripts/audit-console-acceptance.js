@@ -36,6 +36,7 @@ function auditStaticAcceptance() {
   const dashboard = read('dashboard/console.html');
   const consoleRoute = read('api/routes/console.js');
   const accountsRoute = read('api/routes/accounts.js');
+  const messagesRoute = read('api/routes/messages.js');
   const sessionAuthRoute = read('api/routes/session-auth.js');
   const scheduledRoute = read('api/routes/scheduled-actions.js');
   const scheduledService = read('api/services/scheduledActions.js');
@@ -143,6 +144,14 @@ function auditStaticAcceptance() {
     "sanitized.authMethod = 'session'",
     'operationsQueue.add(sanitizedJobData.type, sanitizedJobData',
   ]);
+
+  const legacyDmStorageMissing = hasAll(messagesRoute, [
+    'messageLength: String(message).length',
+    'hasMessage: true',
+  ]);
+  if (messagesRoute.includes('config: JSON.stringify({ username, message })')) {
+    legacyDmStorageMissing.push('legacy DM route stores full message in Operation.config');
+  }
 
   const workerRestartMissing = hasAll(workerRestartHost + productionSmoke, [
     'docker stop',
@@ -257,6 +266,13 @@ function auditStaticAcceptance() {
       queuePayloadMissing.length === 0,
       { service: 'api/services/queuePayload.js', queue: 'api/services/jobQueue.js' },
       queuePayloadMissing
+    ),
+    item(
+      'legacy-dm-history-redaction',
+      'Legacy DM route stores only message metadata in Operation history, not the full DM body.',
+      legacyDmStorageMissing.length === 0,
+      { route: 'api/routes/messages.js' },
+      legacyDmStorageMissing
     ),
     item(
       'production-smoke',
