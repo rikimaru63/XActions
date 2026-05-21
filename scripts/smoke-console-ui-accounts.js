@@ -322,6 +322,11 @@ try {
       && accountForm.cookieValue === accountFormCookie
       && accountForm.defaultChecked === false,
   };
+  const expiredAccountGuidance = {
+    sidebarShowsExpired: !!expiredSidebar?.text.includes('期限切れ'),
+    cardShowsError: !!expiredCard?.text.includes('Smoke UI expired session'),
+    cardShowsNextAction: !!expiredCard?.text.includes('次の操作: 連携情報を更新して確認してください。'),
+  };
   const blockingBadResponses = badResponses.filter((item) => !isIgnorableBadResponse(item, expectedBadResponseUrls));
   const blockingConsoleErrors = consoleErrors.filter((item) => !item.includes('Failed to load resource'));
 
@@ -337,11 +342,11 @@ try {
     && expiredSidebar
     && expiredSidebar.disabled
     && expiredSidebar.disabledByStatus
-    && expiredSidebar.text.includes('期限切れ')
+    && expiredAccountGuidance.sidebarShowsExpired
     && management.detailTitle === 'X連携'
     && activeCards.every((card) => card?.badge === '連携済み')
     && expiredCard?.badge === '期限切れ'
-    && expiredCard?.text.includes('Smoke UI expired session')
+    && Object.values(expiredAccountGuidance).every(Boolean)
     && filterChecks.historyByAccounts
     && filterChecks.schedulesByAccounts
     && pageErrors.length === 0
@@ -359,6 +364,7 @@ try {
     accountFormChecks,
     sidebar,
     management,
+    expiredAccountGuidance,
     filterChecks,
     filterRequests,
     pageErrors,
