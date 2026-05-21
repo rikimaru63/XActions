@@ -11,6 +11,7 @@ This smoke checks the production items from `docs/console-scheduler-multiaccount
 - `/api/scheduled-actions`
 - worker container running
 - scheduler startup log
+- live readonly E2E readiness, and live E2E itself when real accounts/cookies are available
 
 Run it on the VPS host. The script is stored in the API image, then executed on
 the host so it can inspect both API and worker containers.
@@ -28,4 +29,28 @@ XACTIONS_BASE_URL='https://xactions.logence.co.jp' \
 XACTIONS_SMOKE_USERNAME='test_account_20260521092255' \
 XACTIONS_COOLIFY_APP_UUID='sg008w80csw08skkwcwswwgw' \
 bash scripts/smoke-console-production-host.sh
+```
+
+Live readonly mode:
+
+- `XACTIONS_PRODUCTION_LIVE_READONLY=auto` is the default. It runs the live
+  readonly smoke when either two active XAccounts exist for the smoke user or
+  two live cookies are available. Otherwise it prints a skip reason and keeps
+  the production smoke green.
+- `XACTIONS_PRODUCTION_LIVE_READONLY=always` requires the live readonly smoke to
+  run and fail loudly when accounts/cookies are missing.
+- `XACTIONS_PRODUCTION_LIVE_READONLY=never` skips the live readonly check.
+
+Examples:
+
+```bash
+XACTIONS_PRODUCTION_LIVE_READONLY='always' \
+bash /tmp/xactions-console-production-smoke.sh
+```
+
+```bash
+XACTIONS_PRODUCTION_LIVE_READONLY='always' \
+XACTIONS_LIVE_ACCOUNT_A_COOKIE="$COOKIE_A" \
+XACTIONS_LIVE_ACCOUNT_B_COOKIE="$COOKIE_B" \
+bash /tmp/xactions-console-production-smoke.sh
 ```

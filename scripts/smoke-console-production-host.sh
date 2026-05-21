@@ -6,6 +6,7 @@ APP_UUID="${XACTIONS_COOLIFY_APP_UUID:-sg008w80csw08skkwcwswwgw}"
 SMOKE_USERNAME="${XACTIONS_SMOKE_USERNAME:-test_account_20260521092255}"
 API_CONTAINER="${XACTIONS_API_CONTAINER:-}"
 WORKER_CONTAINER="${XACTIONS_WORKER_CONTAINER:-}"
+LIVE_READONLY_MODE="${XACTIONS_PRODUCTION_LIVE_READONLY:-auto}"
 
 find_container() {
   local prefix="$1"
@@ -21,6 +22,14 @@ require_command() {
 
 require_command docker
 require_command curl
+
+case "$LIVE_READONLY_MODE" in
+  auto|always|never) ;;
+  *)
+    echo "XACTIONS_PRODUCTION_LIVE_READONLY must be auto, always, or never." >&2
+    exit 1
+    ;;
+esac
 
 if [[ -z "$API_CONTAINER" ]]; then
   API_CONTAINER="$(find_container api)"
@@ -41,6 +50,7 @@ fi
 echo "baseUrl=${BASE_URL}"
 echo "apiContainer=${API_CONTAINER}"
 echo "workerContainer=${WORKER_CONTAINER}"
+echo "liveReadonlyMode=${LIVE_READONLY_MODE}"
 
 health_body="$(curl -fsS "${BASE_URL}/api/health")"
 echo "ok /api/health ${health_body}"
@@ -134,5 +144,103 @@ if ! grep -q 'Scheduled action scheduler started' <<<"$worker_logs"; then
   exit 1
 fi
 echo "ok scheduler log"
+
+host_has_live_cookies() {
+  [[ -n "${XACTIONS_LIVE_ACCOUNT_A_COOKIE:-}" && -n "${XACTIONS_LIVE_ACCOUNT_B_COOKIE:-}" ]]
+}
+
+container_has_live_cookies() {
+  docker exec "$API_CONTAINER" sh -lc '[ -n "$XACTIONS_LIVE_ACCOUNT_A_COOKIE" ] && [ -n "$XACTIONS_LIVE_ACCOUNT_B_COOKIE" ]'
+}
+
+active_xaccount_count() {
+  docker exec -i \
+    -e XACTIONS_SMOKE_USERNAME="$SMOKE_USERNAME" \
+    "$API_CONTAINER" node --input-type=module <<'NODE'
+import { PrismaClient } from '@prisma/client';
+
+const prisma = new PrismaClient();
+try {
+  const user = await prisma.user.findUnique({
+    where: { username: process.env.XACTIONS_SMOKE_USERNAME },
+    select: { id: true },
+  });
+  const count = user
+    ? await prisma.xAccount.count({ where: { userId: user.id, status: 'active' } })
+    : 0;
+  console.log(String(count));
+} finally {
+  await prisma.$disconnect();
+}
+NODE
+}
+
+run_live_readonly_with_cookies() {
+  local args=(
+    -e "XACTIONS_BASE_URL=${BASE_URL}"
+    -e "XACTIONS_SMOKE_USERNAME=${SMOKE_USERNAME}"
+  )
+  if [[ -n "${XACTIONS_LIVE_ACCOUNT_A_COOKIE:-}" ]]; then
+    args+=(-e "XACTIONS_LIVE_ACCOUNT_A_COOKIE=${XACTIONS_LIVE_ACCOUNT_A_COOKIE}")
+  fi
+  if [[ -n "${XACTIONS_LIVE_ACCOUNT_B_COOKIE:-}" ]]; then
+    args+=(-e "XACTIONS_LIVE_ACCOUNT_B_COOKIE=${XACTIONS_LIVE_ACCOUNT_B_COOKIE}")
+  fi
+  if [[ -n "${XACTIONS_LIVE_PROFILE_TARGET:-}" ]]; then
+    args+=(-e "XACTIONS_LIVE_PROFILE_TARGET=${XACTIONS_LIVE_PROFILE_TARGET}")
+  fi
+
+  docker exec "${args[@]}" "$API_CONTAINER" npm run smoke:console-live-readonly
+}
+
+run_live_readonly_with_existing_accounts() {
+  local args=(
+    -e "XACTIONS_BASE_URL=${BASE_URL}"
+    -e "XACTIONS_SMOKE_USERNAME=${SMOKE_USERNAME}"
+    -e XACTIONS_LIVE_USE_EXISTING_ACCOUNTS=true
+  )
+  if [[ -n "${XACTIONS_LIVE_PROFILE_TARGET:-}" ]]; then
+    args+=(-e "XACTIONS_LIVE_PROFILE_TARGET=${XACTIONS_LIVE_PROFILE_TARGET}")
+  fi
+
+  docker exec "${args[@]}" "$API_CONTAINER" npm run smoke:console-live-readonly
+}
+
+maybe_run_live_readonly() {
+  if [[ "$LIVE_READONLY_MODE" == "never" ]]; then
+    echo "skip live readonly smoke: disabled by XACTIONS_PRODUCTION_LIVE_READONLY=never"
+    return 0
+  fi
+
+  local active_count
+  active_count="$(active_xaccount_count)"
+
+  if host_has_live_cookies; then
+    echo "run live readonly smoke: host cookies"
+    run_live_readonly_with_cookies
+    return 0
+  fi
+
+  if [[ "$active_count" -ge 2 ]]; then
+    echo "run live readonly smoke: existing active XAccounts (${active_count})"
+    run_live_readonly_with_existing_accounts
+    return 0
+  fi
+
+  if container_has_live_cookies; then
+    echo "run live readonly smoke: container cookies"
+    run_live_readonly_with_cookies
+    return 0
+  fi
+
+  if [[ "$LIVE_READONLY_MODE" == "always" ]]; then
+    echo "live readonly smoke required but unavailable: activeXAccounts=${active_count}, live cookies missing" >&2
+    return 1
+  fi
+
+  echo "skip live readonly smoke: activeXAccounts=${active_count}, live cookies missing"
+}
+
+maybe_run_live_readonly
 
 echo "ok console production smoke"
