@@ -56,11 +56,102 @@ function isIgnorableFailedRequest(item) {
 }
 
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+const fixtureTime = new Date('2026-05-21T09:00:00.000Z').toISOString();
+const fixtureAccount = {
+  id: 'ui_smoke_account_expired',
+  username: 'ui_smoke_expired',
+  displayName: 'UI Smoke Expired',
+  status: 'expired',
+  isDefault: false,
+};
+
+function historyFixture(url) {
+  if (url.searchParams.get('featureId') !== 'targetEngage') return { operations: [] };
+  return {
+    operations: [
+      {
+        id: 'ui_smoke_failed_parent',
+        type: 'targetEngage',
+        status: 'failed',
+        batchId: 'ui_smoke_batch',
+        createdAt: fixtureTime,
+        config: {
+          isBatch: true,
+          sourceFeatureId: 'targetEngage',
+        },
+        childOperations: [
+          {
+            id: 'ui_smoke_failed_child',
+            type: 'targetEngage',
+            status: 'failed',
+            accountId: fixtureAccount.id,
+            account: fixtureAccount,
+            error: 'Session expired - please reconnect your X account',
+            createdAt: fixtureTime,
+            config: {
+              sourceFeatureId: 'targetEngage',
+            },
+          },
+        ],
+      },
+    ],
+  };
+}
+
+function scheduleFixture(url) {
+  if (url.searchParams.get('featureId') !== 'targetEngage') return { schedules: [] };
+  return {
+    schedules: [
+      {
+        id: 'ui_smoke_schedule_1',
+        name: 'UI smoke failed schedule',
+        featureId: 'targetEngage',
+        operationType: 'targetEngage',
+        accountId: fixtureAccount.id,
+        account: fixtureAccount,
+        mode: 'dryRun',
+        scheduleType: 'once',
+        status: 'paused',
+        nextRunAt: fixtureTime,
+        lastRunAt: fixtureTime,
+        failureCount: 1,
+        maxRetries: 2,
+        lastError: 'Xのログイン状態が切れました。連携情報を更新してください。',
+      },
+    ],
+  };
+}
+
+function scheduleRunsFixture() {
+  return {
+    runs: [
+      {
+        id: 'ui_smoke_run_1',
+        scheduledActionId: 'ui_smoke_schedule_1',
+        operationId: 'ui_smoke_failed_operation',
+        operationType: 'targetEngage',
+        operationStatus: 'failed',
+        status: 'failed',
+        account: fixtureAccount,
+        scheduledFor: fixtureTime,
+        startedAt: fixtureTime,
+        finishedAt: fixtureTime,
+        error: 'Session expired - please reconnect your X account',
+      },
+    ],
+  };
+}
 
 function isMockedUiListRequest(request) {
   if (request.method() !== 'GET') return false;
-  const url = request.url();
-  return url.includes('/api/console/history?') || url.includes('/api/scheduled-actions?');
+  const url = new URL(request.url());
+  return url.pathname === '/api/console/history' || url.pathname === '/api/scheduled-actions';
+}
+
+function isMockedScheduleRunsRequest(request) {
+  if (request.method() !== 'GET') return false;
+  const url = new URL(request.url());
+  return /^\/api\/scheduled-actions\/[^/]+\/runs$/.test(url.pathname);
 }
 
 const authToken = await resolveToken();
@@ -92,13 +183,22 @@ try {
   await page.setRequestInterception(true);
   page.on('request', (request) => {
     if (isMockedUiListRequest(request)) {
-      const body = request.url().includes('/api/console/history?')
-        ? { operations: [] }
-        : { schedules: [] };
+      const url = new URL(request.url());
+      const body = url.pathname === '/api/console/history'
+        ? historyFixture(url)
+        : scheduleFixture(url);
       request.respond({
         status: 200,
         contentType: 'application/json',
         body: JSON.stringify(body),
+      });
+      return;
+    }
+    if (isMockedScheduleRunsRequest(request)) {
+      request.respond({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify(scheduleRunsFixture()),
       });
       return;
     }
@@ -137,6 +237,47 @@ try {
   await page.waitForFunction(() => document.querySelector('#confirm-modal')?.classList.contains('hidden'));
   await page.click('[data-mode="dryRun"]');
   await page.waitForFunction(() => document.querySelector('[data-mode="dryRun"]')?.classList.contains('active'));
+
+  await page.click('.tabs [data-tab="schedule"]');
+  await page.waitForSelector('[data-schedule-id="ui_smoke_schedule_1"]', { timeout: 30000 });
+  const scheduleGuidance = await page.evaluate(() => {
+    const item = document.querySelector('[data-schedule-id="ui_smoke_schedule_1"]');
+    return {
+      text: item?.textContent?.replace(/\s+/g, ' ').trim() || '',
+      hasRunHistoryButton: !!item?.querySelector('[data-load-runs="ui_smoke_schedule_1"]'),
+    };
+  });
+  await page.click('[data-load-runs="ui_smoke_schedule_1"]');
+  await page.waitForFunction(() => {
+    const list = document.querySelector('[data-schedule-runs="ui_smoke_schedule_1"]');
+    return list && !list.classList.contains('hidden') && list.textContent.includes('次の操作:');
+  });
+  const runGuidance = await page.evaluate(() => {
+    const list = document.querySelector('[data-schedule-runs="ui_smoke_schedule_1"]');
+    return {
+      text: list?.textContent?.replace(/\s+/g, ' ').trim() || '',
+      visible: !!list && !list.classList.contains('hidden'),
+    };
+  });
+  await page.click('.tabs [data-tab="history"]');
+  await page.waitForFunction(() => document.querySelector('#history-panel')?.textContent.includes('失敗分を再実行'));
+  const historyGuidance = await page.evaluate(() => {
+    const panel = document.querySelector('#history-panel');
+    return {
+      text: panel?.textContent?.replace(/\s+/g, ' ').trim() || '',
+      retryVisible: !!panel?.querySelector('[data-retry-failed="ui_smoke_failed_parent"]'),
+    };
+  });
+  const failureGuidance = {
+    scheduleShowsReason: scheduleGuidance.text.includes('失敗理由: Xのログイン状態が切れました。'),
+    scheduleShowsNextAction: scheduleGuidance.text.includes('次の操作: 連携情報を更新して確認してください。'),
+    scheduleHasRunHistoryButton: scheduleGuidance.hasRunHistoryButton,
+    runShowsReason: runGuidance.visible && runGuidance.text.includes('Session expired'),
+    runShowsNextAction: runGuidance.text.includes('次の操作: 連携情報を更新して確認してください。'),
+    historyShowsChildFailure: historyGuidance.text.includes('@ui_smoke_expired: 失敗'),
+    historyShowsNextAction: historyGuidance.text.includes('次の操作: 連携情報を更新して確認してください。'),
+    historyRetryVisible: historyGuidance.retryVisible,
+  };
 
   const categories = await page.evaluate(() => [...document.querySelectorAll('#category-nav button')].map((button) => {
     const [available, total] = (button.querySelector('.count')?.textContent || '0/0')
@@ -327,6 +468,7 @@ try {
     && confirmation.message.includes('実際に操作されます')
     && confirmation.confirmText === '実行する'
     && confirmation.cancelText === '戻る'
+    && Object.values(failureGuidance).every(Boolean)
     && visitedFeatureTotal >= 33
     && categoryResults.every((category) => category.featureCount === category.total)
     && categoryResults.every((category) => category.features.length === category.total)
@@ -359,6 +501,10 @@ try {
     baseUrl,
     result,
     confirmation,
+    failureGuidance,
+    scheduleGuidance,
+    runGuidance,
+    historyGuidance,
     mobileSheet,
     categoryResults,
     visitedFeatureTotal,
