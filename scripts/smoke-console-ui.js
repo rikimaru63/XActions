@@ -50,6 +50,7 @@ function isIgnorableBadResponse(item) {
 function isIgnorableFailedRequest(item) {
   if (!item.includes('net::ERR_ABORTED')) return false;
   return item.includes('/favicon.ico')
+    || item.includes('/api/console/accounts')
     || item.includes('/api/console/history?')
     || item.includes('/api/scheduled-actions?');
 }
