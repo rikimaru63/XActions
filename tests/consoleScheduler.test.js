@@ -226,11 +226,125 @@ describe('console scheduler helpers', () => {
     });
   });
 
-  it('connects posting actions without storing full post text in operation config', () => {
-    for (const id of ['postTweet', 'postThread', 'createPoll']) {
+  it('connects legacy route-backed actions to the console catalog', () => {
+    for (const [id, action] of [
+      ['exportDMs', 'exportDMs'],
+      ['followerScan', 'followerScan'],
+      ['spaces', 'getSpaces'],
+      ['analytics', 'analyzeSentiment'],
+      ['priceCorrelation', 'priceCorrelation'],
+      ['datasets', 'datasets'],
+    ]) {
       expect(getFeatureById(id)).toMatchObject({
         status: 'available',
-        consoleAction: id,
+        consoleAction: action,
+        supportsDryRun: true,
+      });
+    }
+  });
+
+  it('builds payloads for legacy route-backed actions', () => {
+    const exportDms = createActionPayload(
+      getFeatureById('exportDMs'),
+      { conversationUrl: 'https://x.com/messages/1-2', limit: 50, format: 'csv' },
+      'dryRun'
+    );
+    expect(exportDms).toMatchObject({
+      operationType: 'exportDMs',
+      operationConfig: {
+        sourceFeatureId: 'exportDMs',
+        hasConversationUrl: true,
+        limit: 50,
+        format: 'csv',
+        dryRun: true,
+      },
+      jobConfig: {
+        conversationUrl: 'https://x.com/messages/1-2',
+        limit: 50,
+        format: 'csv',
+        dryRun: true,
+      },
+    });
+
+    const scan = createActionPayload(
+      getFeatureById('followerScan'),
+      { username: '@source_user', limit: 250 },
+      'live'
+    );
+    expect(scan).toMatchObject({
+      operationType: 'followerScan',
+      operationConfig: {
+        username: 'source_user',
+        limit: 250,
+        dryRun: true,
+      },
+    });
+
+    const spaces = createActionPayload(
+      getFeatureById('spaces'),
+      { mode: 'scheduled', username: '@host_user', limit: 10 },
+      'dryRun'
+    );
+    expect(spaces).toMatchObject({
+      operationType: 'getScheduledSpaces',
+      jobConfig: {
+        mode: 'scheduled',
+        username: 'host_user',
+        limit: 10,
+        dryRun: true,
+      },
+    });
+
+    const sentiment = createActionPayload(
+      getFeatureById('analytics'),
+      { text: 'This is useful', mode: 'rules' },
+      'dryRun'
+    );
+    expect(sentiment.operationType).toBe('analyzeSentiment');
+    expect(sentiment.operationConfig.text).toBeUndefined();
+    expect(sentiment.operationConfig.textLength).toBe(14);
+    expect(sentiment.jobConfig.text).toBe('This is useful');
+
+    const price = createActionPayload(
+      getFeatureById('priceCorrelation'),
+      {
+        tweets: JSON.stringify([{ timestamp: 1710000000000, text: 'hello' }]),
+        tokenId: 'bitcoin',
+        windows: '1,24',
+      },
+      'dryRun'
+    );
+    expect(price.operationConfig).toMatchObject({
+      tweetCount: 1,
+      tokenId: 'bitcoin',
+      windows: [1, 24],
+      dryRun: true,
+    });
+    expect(price.operationConfig.tweets).toBeUndefined();
+    expect(price.jobConfig.tweets).toEqual([{ timestamp: 1710000000000, text: 'hello', url: undefined }]);
+
+    const datasets = createActionPayload(
+      getFeatureById('datasets'),
+      { action: 'get', name: 'sample', offset: 5, limit: 10 },
+      'dryRun'
+    );
+    expect(datasets).toMatchObject({
+      operationType: 'datasets',
+      jobConfig: {
+        action: 'get',
+        name: 'sample',
+        offset: 5,
+        limit: 10,
+        dryRun: true,
+      },
+    });
+  });
+
+  it('connects posting actions without storing full post text in operation config', () => {
+    for (const id of ['postTweet', 'postThread', 'createPoll', 'schedulePost']) {
+      expect(getFeatureById(id)).toMatchObject({
+        status: 'available',
+        consoleAction: id === 'schedulePost' ? 'postTweet' : id,
         supportsDryRun: true,
         supportsSchedule: true,
       });
@@ -246,6 +360,16 @@ describe('console scheduler helpers', () => {
     expect(tweet.operationConfig.text).toBeUndefined();
     expect(tweet.operationConfig.hasReplyTo).toBe(true);
     expect(tweet.jobConfig.text).toContain('公開本文');
+
+    const scheduledTweet = createActionPayload(
+      getFeatureById('schedulePost'),
+      { text: '予約本文' },
+      'dryRun'
+    );
+    expect(scheduledTweet.operationType).toBe('postTweet');
+    expect(scheduledTweet.operationConfig.sourceFeatureId).toBe('schedulePost');
+    expect(scheduledTweet.operationConfig.text).toBeUndefined();
+    expect(scheduledTweet.jobConfig.text).toBe('予約本文');
 
     const thread = createActionPayload(
       getFeatureById('postThread'),

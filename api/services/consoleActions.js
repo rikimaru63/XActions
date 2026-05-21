@@ -335,6 +335,193 @@ function createActionPayload(feature, inputConfig, mode = 'dryRun', user = {}) {
       };
     }
 
+    case 'exportDMs': {
+      const conversationUrl = String(config.conversationUrl || '').trim();
+      const limit = asNumber(config.limit, 100, 1, 500);
+      const format = String(config.format || 'json').trim().toLowerCase() === 'csv' ? 'csv' : 'json';
+
+      return {
+        operationType: 'exportDMs',
+        operationConfig: {
+          sourceFeatureId: feature.id,
+          hasConversationUrl: !!conversationUrl,
+          limit,
+          format,
+          dryRun: true,
+        },
+        jobConfig: {
+          conversationUrl,
+          limit,
+          format,
+          dryRun: true,
+        },
+      };
+    }
+
+    case 'followerScan': {
+      const username = normalizeUsername(config.username);
+      const limit = asNumber(config.limit, 5000, 50, 5000);
+
+      return {
+        operationType: 'followerScan',
+        operationConfig: {
+          sourceFeatureId: feature.id,
+          username,
+          limit,
+          dryRun: true,
+        },
+        jobConfig: {
+          username,
+          limit,
+          dryRun: true,
+        },
+      };
+    }
+
+    case 'getSpaces': {
+      const requestedMode = String(config.mode || 'live').trim().toLowerCase();
+      const mode = ['live', 'scheduled', 'scrape'].includes(requestedMode) ? requestedMode : 'live';
+      const topic = String(config.topic || '').trim();
+      const username = normalizeUsername(config.username);
+      const spaceUrl = String(config.spaceUrl || '').trim();
+      const limit = asNumber(config.limit, 20, 1, 100);
+      if (mode === 'scrape' && !spaceUrl) throw new Error('Space URLを入力してください。');
+
+      const operationType = mode === 'scheduled'
+        ? 'getScheduledSpaces'
+        : mode === 'scrape'
+          ? 'scrapeSpace'
+          : 'getLiveSpaces';
+
+      return {
+        operationType,
+        operationConfig: {
+          sourceFeatureId: feature.id,
+          mode,
+          topic,
+          username,
+          hasSpaceUrl: !!spaceUrl,
+          limit,
+          dryRun: true,
+        },
+        jobConfig: {
+          mode,
+          topic,
+          username,
+          spaceUrl,
+          limit,
+          dryRun: true,
+        },
+      };
+    }
+
+    case 'analyzeSentiment': {
+      const text = String(config.text || '').trim().slice(0, 10000);
+      const requestedMode = String(config.mode || 'rules').trim().toLowerCase();
+      const mode = requestedMode === 'llm' ? 'llm' : 'rules';
+      if (!text) throw new Error('分析するテキストを入力してください。');
+
+      return {
+        operationType: 'analyzeSentiment',
+        operationConfig: {
+          sourceFeatureId: feature.id,
+          textLength: text.length,
+          mode,
+          dryRun: true,
+        },
+        jobConfig: {
+          text,
+          mode,
+          dryRun: true,
+        },
+      };
+    }
+
+    case 'priceCorrelation': {
+      const tweets = parseJson(config.tweets);
+      const tokenId = String(config.tokenId || '').trim();
+      const network = String(config.network || '').trim();
+      const poolAddress = String(config.poolAddress || '').trim();
+      const windows = String(config.windows || '1,24')
+        .split(',')
+        .map((item) => Number(item.trim()))
+        .filter((item) => Number.isFinite(item) && item > 0)
+        .slice(0, 8);
+
+      if (!Array.isArray(tweets) || tweets.length === 0) {
+        throw new Error('投稿データJSONを配列で入力してください。');
+      }
+      if (!tokenId && !(network && poolAddress)) {
+        throw new Error('CoinGecko ID、または network と poolAddress を入力してください。');
+      }
+
+      const normalizedTweets = tweets.slice(0, 5000).map((tweet) => {
+        const rawTimestamp = tweet.timestamp ?? tweet.date ?? tweet.createdAt ?? '';
+        const numericTimestamp = Number(rawTimestamp);
+        return {
+          timestamp: Number.isFinite(numericTimestamp) ? numericTimestamp : Date.parse(String(rawTimestamp)),
+          text: String(tweet.text || ''),
+          url: tweet.url ? String(tweet.url) : undefined,
+        };
+      }).filter((tweet) => Number.isFinite(tweet.timestamp) && tweet.text);
+
+      if (!normalizedTweets.length) {
+        throw new Error('timestamp と text を含む投稿データを入力してください。');
+      }
+
+      return {
+        operationType: 'priceCorrelation',
+        operationConfig: {
+          sourceFeatureId: feature.id,
+          tweetCount: normalizedTweets.length,
+          tokenId,
+          network,
+          hasPoolAddress: !!poolAddress,
+          windows: windows.length ? windows : [1, 24],
+          dryRun: true,
+        },
+        jobConfig: {
+          tweets: normalizedTweets,
+          tokenId,
+          network,
+          poolAddress,
+          windows: windows.length ? windows : [1, 24],
+          dryRun: true,
+        },
+      };
+    }
+
+    case 'datasets': {
+      const requestedAction = String(config.action || 'list').trim().toLowerCase();
+      const action = ['list', 'get', 'export'].includes(requestedAction) ? requestedAction : 'list';
+      const name = String(config.name || '').trim().replace(/[^a-zA-Z0-9_.-]/g, '');
+      const format = String(config.format || 'json').trim().toLowerCase();
+      const offset = asNumber(config.offset, 0, 0, 100000);
+      const limit = asNumber(config.limit, 100, 1, 1000);
+      if (action !== 'list' && !name) throw new Error('データセット名を入力してください。');
+
+      return {
+        operationType: 'datasets',
+        operationConfig: {
+          sourceFeatureId: feature.id,
+          action,
+          name,
+          format,
+          offset,
+          limit,
+          dryRun: true,
+        },
+        jobConfig: {
+          action,
+          name,
+          format,
+          offset,
+          limit,
+          dryRun: true,
+        },
+      };
+    }
+
     case 'extractVideo': {
       const tweetUrl = String(config.tweetUrl || '').trim();
       if (!tweetUrl) throw new Error('投稿URLを入力してください。');

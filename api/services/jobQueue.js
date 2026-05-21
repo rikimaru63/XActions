@@ -7,6 +7,7 @@ import { processAutoLike } from './operations/autoLike.js';
 import { processFollowEngagers } from './operations/followEngagers.js';
 import { processKeywordFollow } from './operations/keywordFollow.js';
 import { processAutoComment } from './operations/autoComment.js';
+import { runFollowerScan } from './followerScanner.js';
 
 // Puppeteer processors
 import { unfollowNonFollowersBrowser } from './operations/puppeteer/unfollowNonFollowers.js';
@@ -30,7 +31,10 @@ import { extractThread, formatAsMarkdown, formatAsText } from './threadExtractor
 import { extractVideo } from './videoExtractor.js';
 import { getBookmarks } from '../../src/bookmarkManager.js';
 import { getTrends } from '../../src/discoveryExplore.js';
-import { getConversations } from '../../src/dmManager.js';
+import { exportConversation, getConversations } from '../../src/dmManager.js';
+import { getLiveSpaces, getScheduledSpaces, scrapeSpace } from '../../src/spacesManager.js';
+import { analyzeSentiment, analyzeTweetPriceCorrelation } from '../../src/analytics/index.js';
+import { DatasetStore, listDatasets } from '../../src/scraping/paginationEngine.js';
 import { getDecryptedSessionCookie } from '../routes/session-auth.js';
 import { getAccountForUser, getDecryptedAccountCookie, markAccountSessionExpired } from './accountStore.js';
 import { withAccountExecutionLock } from './accountExecutionLock.js';
@@ -307,6 +311,22 @@ function toJsonString(value) {
   return typeof value === 'string' ? value : JSON.stringify(value);
 }
 
+function rowsToCsv(rows = []) {
+  if (!Array.isArray(rows) || rows.length === 0) return '';
+  const headers = [...rows.reduce((keys, row) => {
+    Object.keys(row || {}).forEach((key) => keys.add(key));
+    return keys;
+  }, new Set())];
+  const escape = (value) => {
+    const text = String(value ?? '');
+    return /[",\n\r]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+  };
+  return [
+    headers.join(','),
+    ...rows.map((row) => headers.map((header) => escape(row?.[header])).join(',')),
+  ].join('\n');
+}
+
 async function resolveJobConfig(job) {
   const config = job.data.config || {};
 
@@ -545,6 +565,86 @@ operationsQueue.process('getConversations', 1, async (job) => {
   }
 });
 
+operationsQueue.process('exportDMs', 1, async (job) => {
+  console.log(`🔄 Processing job ${job.id}: exportDMs`);
+
+  const config = await resolveJobConfig(job);
+  const page = await browserAutomation.createPage(config.sessionCookie);
+  try {
+    const result = config.conversationUrl
+      ? await exportConversation(page, config.conversationUrl, { limit: config.limit })
+      : await getConversations(page, { limit: config.limit });
+
+    if (config.format !== 'csv') return { ...result, format: 'json' };
+
+    const rows = result.messages || result.conversations || [];
+    return {
+      ...result,
+      format: 'csv',
+      content: rowsToCsv(rows),
+    };
+  } finally {
+    await page.close();
+  }
+});
+
+operationsQueue.process('followerScan', 1, async (job) => {
+  console.log(`🔄 Processing job ${job.id}: followerScan`);
+
+  const config = await resolveJobConfig(job);
+  const username = String(config.username || config.accountUsername || '').replace(/^@/, '');
+  if (!username) throw new Error('Follower scan requires a username.');
+  if (!config.sessionCookie) throw new Error('Session cookie required. Reconnect your X account.');
+
+  return runFollowerScan(job.data.userId, config.sessionCookie, username, {
+    limit: config.limit || 5000,
+  });
+});
+
+operationsQueue.process('getLiveSpaces', 1, async (job) => {
+  console.log(`🔄 Processing job ${job.id}: getLiveSpaces`);
+
+  const config = await resolveJobConfig(job);
+  const page = await browserAutomation.createPage(config.sessionCookie);
+  try {
+    return getLiveSpaces(page, {
+      query: config.topic || config.query || '',
+      limit: config.limit || 20,
+    });
+  } finally {
+    await page.close();
+  }
+});
+
+operationsQueue.process('getScheduledSpaces', 1, async (job) => {
+  console.log(`🔄 Processing job ${job.id}: getScheduledSpaces`);
+
+  const config = await resolveJobConfig(job);
+  const username = String(config.username || config.accountUsername || '').replace(/^@/, '');
+  if (!username) throw new Error('Scheduled Spaces requires a username.');
+
+  const page = await browserAutomation.createPage(config.sessionCookie);
+  try {
+    return getScheduledSpaces(page, username);
+  } finally {
+    await page.close();
+  }
+});
+
+operationsQueue.process('scrapeSpace', 1, async (job) => {
+  console.log(`🔄 Processing job ${job.id}: scrapeSpace`);
+
+  const config = await resolveJobConfig(job);
+  if (!config.spaceUrl && !config.url) throw new Error('Space URL is required.');
+
+  const page = await browserAutomation.createPage(config.sessionCookie);
+  try {
+    return scrapeSpace(page, config.spaceUrl || config.url);
+  } finally {
+    await page.close();
+  }
+});
+
 operationsQueue.process('extractVideo', 1, async (job) => {
   console.log(`🔄 Processing job ${job.id}: extractVideo`);
 
@@ -579,6 +679,58 @@ operationsQueue.process('unrollThread', 1, async (job) => {
     ...thread,
     format: 'text',
     formatted: formatAsText(thread),
+  };
+});
+
+operationsQueue.process('analyzeSentiment', 2, async (job) => {
+  console.log(`🔄 Processing job ${job.id}: analyzeSentiment`);
+
+  const config = job.data.config || {};
+  return analyzeSentiment(config.text, { mode: config.mode || 'rules' });
+});
+
+operationsQueue.process('priceCorrelation', 1, async (job) => {
+  console.log(`🔄 Processing job ${job.id}: priceCorrelation`);
+
+  const config = job.data.config || {};
+  return analyzeTweetPriceCorrelation({
+    tweets: config.tweets || [],
+    tokenId: config.tokenId,
+    network: config.network,
+    poolAddress: config.poolAddress,
+    windows: config.windows || [1, 24],
+  });
+});
+
+operationsQueue.process('datasets', 1, async (job) => {
+  console.log(`🔄 Processing job ${job.id}: datasets`);
+
+  const config = job.data.config || {};
+  const action = config.action || 'list';
+
+  if (action === 'get') {
+    const store = new DatasetStore(config.name);
+    return store.getData({
+      offset: config.offset || 0,
+      limit: config.limit || 100,
+    });
+  }
+
+  if (action === 'export') {
+    const store = new DatasetStore(config.name);
+    const content = await store.export(config.format || 'json');
+    return {
+      name: config.name,
+      format: config.format || 'json',
+      content,
+      exportedAt: new Date().toISOString(),
+    };
+  }
+
+  const datasets = await listDatasets();
+  return {
+    datasets,
+    count: datasets.length,
   };
 });
 
