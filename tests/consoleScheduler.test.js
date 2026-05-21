@@ -14,7 +14,11 @@ import {
   isSessionExpiredError,
   shouldPauseSchedulesForAccountStatus,
 } from '../api/services/accountStore.js';
-import { createActionPayload, sanitizeConfig } from '../api/services/consoleActions.js';
+import {
+  createActionPayload,
+  operationMatchesFeatureHistory,
+  sanitizeConfig,
+} from '../api/services/consoleActions.js';
 import {
   buildEncryptedRetryConfig,
   decryptRetryConfig,
@@ -366,6 +370,28 @@ describe('console scheduler helpers', () => {
     expect(route).toContain('messageLength: String(message).length');
     expect(route).toContain('hasMessage: true');
     expect(route).not.toContain('config: JSON.stringify({ username, message })');
+  });
+
+  it('keeps legacy and console DM operations visible in the DM history filter', () => {
+    expect(operationMatchesFeatureHistory({
+      type: 'sendDM',
+      config: { hasMessage: true },
+    }, 'sendDM')).toBe(true);
+
+    expect(operationMatchesFeatureHistory({
+      type: 'sendDM',
+      config: { sourceFeatureId: 'sendDM', hasMessage: true },
+    }, 'sendDM')).toBe(true);
+
+    expect(operationMatchesFeatureHistory({
+      type: 'targetEngage',
+      config: { sourceFeatureId: 'targetEngage', hasDmMessage: true },
+    }, 'sendDM')).toBe(true);
+
+    expect(operationMatchesFeatureHistory({
+      type: 'targetEngage',
+      config: { sourceFeatureId: 'targetEngage', hasDmMessage: false },
+    }, 'sendDM')).toBe(false);
   });
 
   it('detects X session expiration errors', () => {

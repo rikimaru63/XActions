@@ -63,6 +63,23 @@ function sanitizeOperation(operation) {
   };
 }
 
+function operationMatchesFeatureHistory(operation, featureId) {
+  if (!featureId) return true;
+
+  if (featureId === 'sendDM') {
+    return operation.type === 'sendDM'
+      || operation.config?.sourceFeatureId === 'sendDM'
+      || operation.config?.hasDmMessage === true
+      || operation.config?.hasMessage === true;
+  }
+
+  if (featureId === 'targetEngage') {
+    return operation.type === 'targetEngage';
+  }
+
+  return true;
+}
+
 function createActionPayload(feature, inputConfig, mode = 'dryRun', user = {}) {
   const config = inputConfig || {};
   const dryRun = mode !== 'live';
@@ -1144,6 +1161,7 @@ export {
   createActionPayload,
   hiddenConfigKeys,
   normalizeUsername,
+  operationMatchesFeatureHistory,
   parseJson,
   sanitizeConfig,
   sanitizeOperation,

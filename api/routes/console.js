@@ -10,6 +10,7 @@ import {
 } from '../config/features.js';
 import {
   createActionPayload,
+  operationMatchesFeatureHistory,
   parseJson,
   sanitizeOperation,
 } from '../services/consoleActions.js';
@@ -274,15 +275,7 @@ router.get('/history', async (req, res) => {
 
     const sanitized = operations
       .map(sanitizeOperation)
-      .filter((operation) => {
-        if (sourceFeatureId === 'sendDM') {
-          return operation.config?.sourceFeatureId === 'sendDM' || operation.config?.hasDmMessage === true;
-        }
-        if (sourceFeatureId === 'targetEngage') {
-          return operation.type === 'targetEngage';
-        }
-        return true;
-      })
+      .filter((operation) => operationMatchesFeatureHistory(operation, sourceFeatureId))
       .slice(0, limit);
 
     res.json({ operations: sanitized });
