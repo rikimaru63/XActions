@@ -48,6 +48,7 @@
     "test:x402:all": "vitest run tests/x402*.test.js",
     "verify:x402": "node scripts/verify-x402.js",
     "verify:headless": "node scripts/verify-headless.js",
+    "audit:console-acceptance": "node scripts/audit-console-acceptance.js",
     "audit:console-catalog": "node scripts/audit-console-catalog.js",
     "smoke:console-ui": "node scripts/smoke-console-ui.js",
     "smoke:console-ui-accounts": "node scripts/smoke-console-ui-accounts.js",
