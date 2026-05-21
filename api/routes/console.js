@@ -296,7 +296,7 @@ router.post('/actions/execute', async (req, res) => {
     if (!feature) return res.status(404).json({ error: '機能が見つかりません。' });
     if (feature.status !== 'available' || !feature.consoleAction) {
       return res.status(400).json({
-        error: 'この機能はまだ新しいコンソールから実行できません。',
+        error: 'この機能はこの画面から実行できません。',
         page: feature.page || null,
         endpoint: feature.endpoint || null,
       });

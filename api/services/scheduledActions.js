@@ -95,10 +95,10 @@ function publicScheduledActionRun(run) {
 function validateFeatureForSchedule(feature, mode) {
   if (!feature) throw new Error('機能が見つかりません。');
   if (feature.status !== 'available' || !feature.consoleAction) {
-    throw new Error('この機能はまだ予約実行に対応していません。');
+    throw new Error('この機能は予約できません。');
   }
   if (!feature.supportsSchedule) {
-    throw new Error('この機能は予約実行に対応していません。');
+    throw new Error('この機能は予約できません。');
   }
   if (mode === 'dryRun' && !feature.supportsDryRun) {
     throw new Error('この機能は確認のみには対応していません。実行を選んでください。');

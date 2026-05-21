@@ -782,7 +782,7 @@
     <aside class="rail">
       <div class="brand">
         <span>XActions</span>
-        <a class="link-btn" href="/classic-dashboard">旧ホーム</a>
+        <a class="link-btn" href="/classic-dashboard">従来版</a>
       </div>
       <div class="account" id="account-box">
         <div class="account-label">Xアカウント</div>
@@ -791,7 +791,7 @@
         <div class="account-list" id="account-list"></div>
         <div class="account-tools">
           <button type="button" class="link-btn" id="toggle-account-form">追加</button>
-          <a class="link-btn" href="/classic-dashboard">旧連携</a>
+          <a class="link-btn" href="/classic-dashboard">従来版</a>
         </div>
         <form class="account-form hidden" id="account-form">
           <input id="new-account-username" autocomplete="off" placeholder="@username">
@@ -813,7 +813,7 @@
           <h1>コンソール</h1>
         </div>
         <div class="top-actions">
-          <a class="secondary" href="/actions">旧アクション</a>
+          <a class="secondary" href="/actions">従来の操作</a>
           <a class="primary" href="/console">ホーム</a>
         </div>
       </header>
@@ -946,6 +946,16 @@
         completed: '完了',
         failed: '失敗',
       }[status] || status || '-';
+    }
+
+    function scheduleTypeLabel(type) {
+      return {
+        once: '1回だけ',
+        daily: '毎日',
+        weekly: '毎週',
+        interval: '指定間隔',
+        cron: '詳細指定',
+      }[type] || type || '-';
     }
 
     function statusBadgeClass(status) {
@@ -1145,7 +1155,7 @@
 
       if (!state.accounts.length) {
         els.accountName.textContent = '未連携';
-        els.accountState.innerHTML = '<a href="/classic-dashboard">旧画面でX連携を設定</a>';
+        els.accountState.innerHTML = '<a href="/classic-dashboard">従来版で連携</a>';
         els.accountList.innerHTML = liveReadinessCard('sidebar');
         return;
       }
@@ -1491,12 +1501,12 @@
 
     function renderSchedule(selected) {
       if (selected.status !== 'available' || !selected.consoleAction) {
-        els.schedulePanel.innerHTML = '<div class="empty">この機能はコンソール予約にまだ対応していません。</div>';
+        els.schedulePanel.innerHTML = '<div class="empty">この機能に予約設定はありません。</div>';
         return;
       }
 
       if (!selected.supportsSchedule) {
-        els.schedulePanel.innerHTML = '<div class="empty">この機能は予約実行に対応していません。</div>';
+        els.schedulePanel.innerHTML = '<div class="empty">この機能は予約できません。</div>';
         return;
       }
 
@@ -1519,7 +1529,7 @@
             <option value="daily">毎日</option>
             <option value="weekly">毎週</option>
             <option value="interval">指定間隔</option>
-            <option value="cron">cron</option>
+            <option value="cron">詳細指定</option>
           </select>
         </div>
         <div class="field">
@@ -1535,7 +1545,7 @@
           <input id="schedule-days-of-week" placeholder="0,1,2,3,4,5,6">
         </div>
         <div class="field">
-          <label for="schedule-cron">cron</label>
+          <label for="schedule-cron">詳細指定</label>
           <input id="schedule-cron" placeholder="*/30 * * * *">
         </div>
         <div class="field">
@@ -1684,7 +1694,7 @@
 
     function scheduleDetail(schedule) {
       const parts = [
-        schedule.scheduleType,
+        scheduleTypeLabel(schedule.scheduleType),
         schedule.mode === 'live' ? '実行' : '確認のみ',
         `再試行 ${schedule.failureCount || 0}/${schedule.maxRetries ?? 0}`,
       ];

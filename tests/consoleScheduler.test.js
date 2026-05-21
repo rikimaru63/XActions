@@ -108,6 +108,25 @@ describe('console scheduler helpers', () => {
     expect(server).toContain("dashboard/index.html");
     expect(html).toContain('href="/classic-dashboard"');
     expect(html).not.toContain('href="/dashboard"');
+    expect(html).toContain('従来版');
+    expect(html).toContain('従来の操作');
+    expect(html).not.toContain('旧ホーム');
+    expect(html).not.toContain('旧アクション');
+    expect(html).not.toContain('旧連携');
+  });
+
+  it('keeps schedule copy user-facing instead of implementation-facing', () => {
+    const html = readFileSync(new URL('../dashboard/console.html', import.meta.url), 'utf8');
+    const scheduledActions = readFileSync(new URL('../api/services/scheduledActions.js', import.meta.url), 'utf8');
+    const consoleRoute = readFileSync(new URL('../api/routes/console.js', import.meta.url), 'utf8');
+
+    expect(html).toContain('function scheduleTypeLabel');
+    expect(html).toContain("cron: '詳細指定'");
+    expect(html).toContain('この機能に予約設定はありません。');
+    expect(html).toContain('この機能は予約できません。');
+    expect(html).not.toContain('コンソール予約にまだ対応していません');
+    expect(scheduledActions).toContain('この機能は予約できません。');
+    expect(consoleRoute).toContain('この機能はこの画面から実行できません。');
   });
 
   it('shows live readiness guidance for the final two-account verification', () => {

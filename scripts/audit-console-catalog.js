@@ -461,11 +461,24 @@ function auditUi() {
     'function requestConfirmation',
     'function updateDetailSheet',
     '<html lang="ja">',
+    'function scheduleTypeLabel',
+    '従来の操作',
+    '従来版で連携',
+    'この機能に予約設定はありません。',
   ];
   const missing = requiredSnippets.filter((snippet) => !html.includes(snippet));
+  const forbiddenVisibleCopy = [
+    '旧ホーム',
+    '旧アクション',
+    '旧連携',
+    'コンソール予約にまだ対応していません',
+  ].filter((snippet) => html.includes(snippet));
   return {
-    ok: missing.length === 0,
-    missing,
+    ok: missing.length === 0 && forbiddenVisibleCopy.length === 0,
+    missing: [
+      ...missing,
+      ...forbiddenVisibleCopy.map((snippet) => `forbidden visible copy: ${snippet}`),
+    ],
   };
 }
 

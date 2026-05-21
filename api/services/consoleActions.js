@@ -1154,7 +1154,7 @@ function createActionPayload(feature, inputConfig, mode = 'dryRun', user = {}) {
     }
 
     default:
-      throw new Error('この機能はまだコンソールから実行できません。');
+      throw new Error('この機能はこの画面から実行できません。');
   }
 }
 
