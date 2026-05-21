@@ -5,6 +5,7 @@ import { shouldSerializeAccountJob } from '../api/services/accountExecutionLock.
 import {
   assertAccountSelectionLimit,
   explicitAccountIdsFromBody,
+  explicitAccountIdsFromQuery,
   MAX_ACCOUNT_SELECTION,
   operationAccountHistoryWhere,
 } from '../api/services/accountSelection.js';
@@ -168,6 +169,9 @@ describe('console scheduler helpers', () => {
     expect(explicitAccountIdsFromBody({ accountId: 'acc_1' })).toEqual(['acc_1']);
     expect(explicitAccountIdsFromBody({ accountIds: ['acc_1', 'acc_1', ' acc_2 '] })).toEqual(['acc_1', 'acc_2']);
     expect(explicitAccountIdsFromBody({})).toEqual([]);
+    expect(explicitAccountIdsFromQuery({ accountId: 'acc_1' })).toEqual(['acc_1']);
+    expect(explicitAccountIdsFromQuery({ accountIds: 'acc_1, acc_2', accountId: 'acc_2' })).toEqual(['acc_1', 'acc_2']);
+    expect(explicitAccountIdsFromQuery({})).toEqual([]);
     expect(() => assertAccountSelectionLimit(['acc_1', 'acc_2'])).not.toThrow();
     expect(() => assertAccountSelectionLimit(['acc_1', 'acc_2', 'acc_3'])).toThrow(
       `一度に選べるXアカウントは${MAX_ACCOUNT_SELECTION}件までです。`

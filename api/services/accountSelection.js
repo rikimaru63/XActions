@@ -12,6 +12,17 @@ function explicitAccountIdsFromBody(body = {}) {
     .filter(Boolean))];
 }
 
+function explicitAccountIdsFromQuery(query = {}) {
+  const raw = [
+    ...String(query.accountIds || '')
+      .split(',')
+      .map((item) => item.trim()),
+    String(query.accountId || '').trim(),
+  ];
+
+  return [...new Set(raw.filter(Boolean))];
+}
+
 function assertAccountSelectionLimit(accountIds = []) {
   const count = new Set(accountIds.filter(Boolean)).size;
   if (count > MAX_ACCOUNT_SELECTION) {
@@ -44,5 +55,6 @@ export {
   MAX_ACCOUNT_SELECTION,
   assertAccountSelectionLimit,
   explicitAccountIdsFromBody,
+  explicitAccountIdsFromQuery,
   operationAccountHistoryWhere,
 };
