@@ -36,6 +36,7 @@ function auditStaticAcceptance() {
   const dashboard = read('dashboard/console.html');
   const consoleRoute = read('api/routes/console.js');
   const accountsRoute = read('api/routes/accounts.js');
+  const sessionAuthRoute = read('api/routes/session-auth.js');
   const scheduledRoute = read('api/routes/scheduled-actions.js');
   const scheduledService = read('api/services/scheduledActions.js');
   const jobQueue = read('api/services/jobQueue.js');
@@ -90,6 +91,14 @@ function auditStaticAcceptance() {
     'accountIds: collectAccountIds',
   ]);
 
+  const legacySessionMissing = hasAll(accountStore + sessionAuthRoute + productionSmoke + JSON.stringify(pkg.scripts || {}), [
+    'ensureDefaultAccountForUser',
+    'encryptedCookie: user.sessionCookie',
+    'Compatibility fallback',
+    'upsertAccountForUser(updatedUser',
+    'smoke:console-legacy-session',
+  ]);
+
   const schedulerMissing = hasAll(scheduledRoute + scheduledService + schema, [
     'model ScheduledAction',
     'model ScheduledActionRun',
@@ -141,6 +150,7 @@ function auditStaticAcceptance() {
     'verify:headless',
     'smoke:console-ui',
     'smoke:console-ui-accounts',
+    'smoke:console-legacy-session',
     'smoke:console-scheduler',
     'Scheduled action scheduler started',
   ]);
@@ -189,6 +199,13 @@ function auditStaticAcceptance() {
       accountSelectionMissing.length === 0,
       { maxAccounts: 2 },
       accountSelectionMissing
+    ),
+    item(
+      'legacy-session-migration',
+      'Users with only User.sessionCookie are migrated into a default XAccount and covered by production smoke.',
+      legacySessionMissing.length === 0,
+      { route: 'api/routes/session-auth.js', service: 'api/services/accountStore.js' },
+      legacySessionMissing
     ),
     item(
       'persistent-schedules',

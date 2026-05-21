@@ -248,6 +248,11 @@ append_host_env_if_present acceptance_args "${LIVE_ACCOUNT_ACCEPTANCE_ENV_VARS[@
 docker exec "${acceptance_args[@]}" "$API_CONTAINER" npm run audit:console-acceptance
 echo "ok console acceptance audit"
 
+docker exec \
+  -e XACTIONS_BASE_URL="$BASE_URL" \
+  "$API_CONTAINER" npm run smoke:console-legacy-session
+echo "ok legacy session migration smoke"
+
 docker exec "$API_CONTAINER" npm run verify:headless
 echo "ok headless browser"
 
