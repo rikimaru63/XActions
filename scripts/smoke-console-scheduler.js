@@ -237,6 +237,29 @@ async function exerciseAccountDeleteApi(token, accounts) {
   return results;
 }
 
+async function assertDeletedAccountSchedulesPaused(scheduleIds) {
+  const rows = await prisma.scheduledAction.findMany({
+    where: { id: { in: scheduleIds } },
+    select: {
+      id: true,
+      accountId: true,
+      status: true,
+      lastError: true,
+    },
+    orderBy: { createdAt: 'asc' },
+  });
+
+  assert(rows.length === scheduleIds.length, 'Could not reload all schedules after account deletion.');
+
+  const unsafe = rows.filter((row) => row.status !== 'paused' || row.accountId !== null || !row.lastError);
+  assert(
+    unsafe.length === 0,
+    `Account deletion did not pause and detach schedules: ${JSON.stringify(unsafe)}`
+  );
+
+  return rows;
+}
+
 async function createSmokeAccounts(userId) {
   const usernames = [`${accountPrefix}a_${smokeId}`, `${accountPrefix}b_${smokeId}`];
   const accounts = [];
@@ -475,6 +498,7 @@ async function main() {
     'Scheduled run operations were not visible in filtered history.'
   );
   const accountDeletes = await exerciseAccountDeleteApi(token, accounts);
+  const deletedAccountSchedules = await assertDeletedAccountSchedulesPaused(created.scheduleIds);
 
   const summary = {
     ok: true,
@@ -500,6 +524,12 @@ async function main() {
       accountId: schedule.accountId,
       status: schedule.status,
       nextRunAt: schedule.nextRunAt,
+    })),
+    deletedAccountSchedules: deletedAccountSchedules.map((schedule) => ({
+      id: schedule.id,
+      accountId: schedule.accountId,
+      status: schedule.status,
+      hasLastError: !!schedule.lastError,
     })),
     scheduledRuns: scheduledRuns.map((run) => ({
       id: run.id,
