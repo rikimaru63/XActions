@@ -49,6 +49,12 @@ function isIgnorableBadResponse(item) {
 
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
+function isMockedUiListRequest(request) {
+  if (request.method() !== 'GET') return false;
+  const url = request.url();
+  return url.includes('/api/console/history?') || url.includes('/api/scheduled-actions?');
+}
+
 const authToken = await resolveToken();
 const browser = await puppeteer.launch(puppeteerLaunchOptions({
   headless: 'new',
@@ -74,6 +80,21 @@ try {
   });
   page.on('requestfailed', (request) => {
     failedRequests.push(`${request.method()} ${request.url()} ${request.failure()?.errorText || ''}`.trim());
+  });
+  await page.setRequestInterception(true);
+  page.on('request', (request) => {
+    if (isMockedUiListRequest(request)) {
+      const body = request.url().includes('/api/console/history?')
+        ? { operations: [] }
+        : { schedules: [] };
+      request.respond({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify(body),
+      });
+      return;
+    }
+    request.continue();
   });
 
   await page.goto(`${baseUrl}/login`, { waitUntil: 'domcontentloaded', timeout: 60000 });
@@ -135,6 +156,7 @@ try {
       const rows = [...document.querySelectorAll('#feature-list .feature-row')].map((row) => ({
         id: row.dataset.feature,
         title: row.querySelector('.feature-title')?.textContent?.trim(),
+        summary: row.querySelector('.feature-summary')?.textContent?.trim(),
       }));
       return {
         rows,
@@ -143,39 +165,67 @@ try {
       };
     });
 
-    if (categoryState.rows[0]) {
-      await page.click(`#feature-list [data-feature="${categoryState.rows[0].id}"]`);
+    const featureResults = [];
+    for (const row of categoryState.rows) {
+      await page.click(`#feature-list [data-feature="${row.id}"]`);
       await page.waitForFunction(
         (featureId) => document.querySelector(`#feature-list [data-feature="${featureId}"]`)?.classList.contains('active'),
         {},
-        categoryState.rows[0].id
+        row.id
       );
-    }
 
-    const tabStates = [];
-    for (const tabId of ['settings', 'schedule', 'history']) {
-      await page.click(`.tabs [data-tab="${tabId}"]`);
-      await page.waitForFunction(
-        (id) => document.querySelector(`.tabs [data-tab="${id}"]`)?.classList.contains('active'),
-        {},
-        tabId
-      );
-      await delay(150);
-      tabStates.push(await page.evaluate((id) => {
-        const panel = document.querySelector(`#${id}-panel`);
-        return {
-          id,
-          visible: !!panel && !panel.classList.contains('hidden'),
-          textLength: panel?.textContent?.trim().length || 0,
-        };
-      }, tabId));
+      const detailState = await page.evaluate(() => ({
+        selectedFeatureId: document.querySelector('#feature-list .feature-row.active')?.dataset.feature || null,
+        detailTitle: document.querySelector('#detail-title')?.textContent?.trim() || '',
+        summaryLength: document.querySelector('#detail-summary')?.textContent?.trim().length || 0,
+        badgeCount: document.querySelectorAll('#detail-badges .badge').length,
+      }));
+
+      const tabStates = [];
+      for (const tabId of ['settings', 'schedule', 'history']) {
+        await page.click(`.tabs [data-tab="${tabId}"]`);
+        await page.waitForFunction(
+          (id) => document.querySelector(`.tabs [data-tab="${id}"]`)?.classList.contains('active'),
+          {},
+          tabId
+        );
+        await page.waitForFunction(
+          (id) => {
+            const panel = document.querySelector(`#${id}-panel`);
+            return !!panel && !panel.classList.contains('hidden') && panel.textContent.trim().length > 0;
+          },
+          {},
+          tabId
+        );
+        await delay(50);
+        tabStates.push(await page.evaluate((id) => {
+          const panel = document.querySelector(`#${id}-panel`);
+          return {
+            id,
+            visible: !!panel && !panel.classList.contains('hidden'),
+            textLength: panel?.textContent?.trim().length || 0,
+          };
+        }, tabId));
+      }
+
+      featureResults.push({
+        id: row.id,
+        title: row.title,
+        summaryLength: row.summary?.length || 0,
+        detailTitle: detailState.detailTitle,
+        detailMatchesList: detailState.detailTitle === row.title,
+        selectedFeatureId: detailState.selectedFeatureId,
+        summaryRendered: detailState.summaryLength > 0,
+        badgeCount: detailState.badgeCount,
+        tabStates,
+      });
     }
 
     categoryResults.push({
       ...category,
       featureCount: categoryState.rows.length,
       firstFeature: categoryState.rows[0]?.title || null,
-      tabStates,
+      features: featureResults,
     });
   }
 
@@ -194,7 +244,12 @@ try {
     && confirmation.cancelText === '戻る'
     && visitedFeatureTotal >= 33
     && categoryResults.every((category) => category.featureCount === category.total)
-    && categoryResults.every((category) => category.tabStates.every((tab) => tab.visible && tab.textLength > 0))
+    && categoryResults.every((category) => category.features.length === category.total)
+    && categoryResults.every((category) => category.features.every((item) => item.detailMatchesList))
+    && categoryResults.every((category) => category.features.every((item) => item.selectedFeatureId === item.id))
+    && categoryResults.every((category) => category.features.every((item) => item.summaryLength > 0 && item.summaryRendered))
+    && categoryResults.every((category) => category.features.every((item) => item.badgeCount > 0))
+    && categoryResults.every((category) => category.features.every((item) => item.tabStates.every((tab) => tab.visible && tab.textLength > 0)))
     && result.tabIds.join(',') === 'settings,schedule,history'
     && result.tabs.includes('設定')
     && result.tabs.includes('予約')
