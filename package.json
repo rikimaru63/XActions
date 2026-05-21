@@ -51,6 +51,7 @@
     "audit:console-catalog": "node scripts/audit-console-catalog.js",
     "smoke:console-ui": "node scripts/smoke-console-ui.js",
     "smoke:console-scheduler": "node scripts/smoke-console-scheduler.js",
+    "smoke:console-live-readonly": "node scripts/smoke-console-live-readonly.js",
     "test:payment": "node scripts/test-x402-payment.js",
     "deploy": "bash scripts/deploy.sh",
     "deploy:railway": "bash scripts/deploy.sh railway",
