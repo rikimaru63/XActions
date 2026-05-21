@@ -20,6 +20,27 @@ router.get('/', async (req, res) => {
     if (req.query.status) where.status = String(req.query.status);
     if (req.query.featureId) where.featureId = String(req.query.featureId);
     if (req.query.accountId) where.accountId = String(req.query.accountId);
+    if (req.query.accountIds) {
+      const requestedAccountIds = String(req.query.accountIds)
+        .split(',')
+        .map((item) => item.trim())
+        .filter(Boolean);
+
+      if (requestedAccountIds.length) {
+        const accounts = await prisma.xAccount.findMany({
+          where: {
+            userId: req.user.id,
+            id: { in: requestedAccountIds },
+          },
+          select: { id: true },
+        });
+        const allowedIds = accounts.map((account) => account.id);
+        if (allowedIds.length !== new Set(requestedAccountIds).size) {
+          return res.status(400).json({ error: '選択したXアカウントが見つかりません。' });
+        }
+        where.accountId = allowedIds.length === 1 ? allowedIds[0] : { in: allowedIds };
+      }
+    }
 
     const schedules = await prisma.scheduledAction.findMany({
       where,

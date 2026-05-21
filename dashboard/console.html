@@ -769,6 +769,11 @@
       return checked.length ? checked : state.selectedAccountIds;
     }
 
+    function accountQuery(selected) {
+      if (!selected?.accountRequired || !state.selectedAccountIds.length) return '';
+      return `&accountIds=${encodeURIComponent(state.selectedAccountIds.join(','))}`;
+    }
+
     function renderAccountPicker(selected) {
       if (!selected.accountRequired) return '';
       syncSelectedAccounts();
@@ -799,6 +804,9 @@
       scope.querySelectorAll('[data-account-choice]').forEach((input) => {
         input.addEventListener('change', () => {
           state.selectedAccountIds = [...scope.querySelectorAll('[data-account-choice]:checked')].map((item) => item.value);
+          const selected = feature();
+          if (selected && state.selectedTab === 'schedule') loadSchedules(selected);
+          if (selected && state.selectedTab === 'history') loadHistory();
         });
       });
     }
@@ -1120,7 +1128,7 @@
 
       list.innerHTML = '<div class="empty">予約を読み込み中</div>';
       try {
-        const data = await apiRequest(`/scheduled-actions?featureId=${encodeURIComponent(selected.id)}&limit=10`);
+        const data = await apiRequest(`/scheduled-actions?featureId=${encodeURIComponent(selected.id)}&limit=10${accountQuery(selected)}`);
         if (!data.schedules.length) {
           list.innerHTML = '<div class="empty">この機能の予約はまだありません。</div>';
           return;
@@ -1196,7 +1204,7 @@
 
       els.historyPanel.innerHTML = '<div class="empty">履歴を読み込み中</div>';
       try {
-        const data = await apiRequest(`/console/history?featureId=${encodeURIComponent(selected.id)}&limit=10`);
+        const data = await apiRequest(`/console/history?featureId=${encodeURIComponent(selected.id)}&limit=10${accountQuery(selected)}`);
         if (!data.operations.length) {
           els.historyPanel.innerHTML = '<div class="empty">この機能の履歴はまだありません。</div>';
           return;

@@ -86,6 +86,26 @@ router.get('/history', async (req, res) => {
 
     if (status) where.status = String(status);
 
+    const requestedAccountIds = String(req.query.accountIds || req.query.accountId || '')
+      .split(',')
+      .map((item) => item.trim())
+      .filter(Boolean);
+
+    if (requestedAccountIds.length) {
+      const accounts = await prisma.xAccount.findMany({
+        where: {
+          userId: req.user.id,
+          id: { in: requestedAccountIds },
+        },
+        select: { id: true },
+      });
+      const allowedIds = accounts.map((account) => account.id);
+      if (allowedIds.length !== new Set(requestedAccountIds).size) {
+        return res.status(400).json({ error: '選択したXアカウントが見つかりません。' });
+      }
+      where.accountId = allowedIds.length === 1 ? allowedIds[0] : { in: allowedIds };
+    }
+
     const operations = await prisma.operation.findMany({
       where,
       include: {
