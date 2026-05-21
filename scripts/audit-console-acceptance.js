@@ -43,6 +43,7 @@ function auditStaticAcceptance() {
   const scheduledRoute = read('api/routes/scheduled-actions.js');
   const scheduledService = read('api/services/scheduledActions.js');
   const consoleActions = read('api/services/consoleActions.js');
+  const featureConfig = read('api/config/features.js');
   const jobQueue = read('api/services/jobQueue.js');
   const queuePayload = read('api/services/queuePayload.js');
   const accountExecutionLock = read('api/services/accountExecutionLock.js');
@@ -142,6 +143,45 @@ function auditStaticAcceptance() {
     'hasDmMessage: !!dmMessage',
     '...(dmMessage ? { dmMessage } : {})',
   ]);
+
+  const liveConfirmationMissing = hasAll(dashboard + uiSmoke, [
+    'id="confirm-modal"',
+    'function requestConfirmation',
+    "title: '実行前の確認'",
+    "title: '実行予約の確認'",
+    "title: '再実行の確認'",
+    '実際に操作されます',
+    'confirmation.visible',
+    'confirmation.confirmText === \'実行する\'',
+  ]);
+  if (dashboard.includes('window.confirm')) {
+    liveConfirmationMissing.push('window.confirm is still used');
+  }
+
+  const numberFieldLimitMissing = features.flatMap((feature) => (feature.fields || [])
+    .filter((field) => field.type === 'number')
+    .flatMap((field) => {
+      const missing = [];
+      if (typeof field.min !== 'number') missing.push(`${feature.id}.${field.key}: missing min`);
+      if (typeof field.max !== 'number') missing.push(`${feature.id}.${field.key}: missing max`);
+      return missing;
+    }));
+
+  const bulkLimitMissing = [
+    ...numberFieldLimitMissing,
+    ...hasAll(accountSelection + consoleActions + featureConfig + dashboard, [
+      'MAX_ACCOUNT_SELECTION = 2',
+      'const MAX_DM_MESSAGE_LENGTH = 1000',
+      '.slice(0, MAX_DM_MESSAGE_LENGTH)',
+      'asNumber(config.maxLikes, 10, 1, 50)',
+      'asNumber(config.maxFollows, 10, 1, 50)',
+      'asNumber(config.maxComments, 3, 1, 20)',
+      'asNumber(config.limit || config.maxUnfollows, 20, 1, 100)',
+      'tweets.slice(0, 5000)',
+      'maxlength="${field.max || \'\'}"',
+      'max="${field.max ?? \'\'}"',
+    ]),
+  ];
 
   const legacySessionMissing = hasAll(accountStore + sessionAuthRoute + productionSmoke + JSON.stringify(pkg.scripts || {}), [
     'ensureDefaultAccountForUser',
@@ -318,6 +358,20 @@ function auditStaticAcceptance() {
       livePacingMissing.length === 0,
       { service: 'api/services/accountExecutionLock.js', cooldownMs: 60000 },
       livePacingMissing
+    ),
+    item(
+      'live-confirmation-modal',
+      'Live execution, live schedules, and live reruns require an in-console confirmation before they start.',
+      liveConfirmationMissing.length === 0,
+      { ui: 'dashboard/console.html', smoke: 'smoke:console-ui' },
+      liveConfirmationMissing
+    ),
+    item(
+      'bulk-execution-limits',
+      'Bulk and high-risk inputs have explicit UI and server-side limits before execution or scheduling.',
+      bulkLimitMissing.length === 0,
+      { maxAccounts: 2, dmMessageMax: 1000, highRiskActionMax: 50 },
+      bulkLimitMissing
     ),
     item(
       'legacy-session-migration',

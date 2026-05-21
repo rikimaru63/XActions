@@ -50,6 +50,12 @@ import {
 } from '../scripts/lib/consoleLiveReadiness.js';
 
 describe('console scheduler helpers', () => {
+  function numberFieldMax(featureId, key) {
+    const field = getFeatureById(featureId)?.fields?.find((item) => item.key === key);
+    if (!field || typeof field.max !== 'number') throw new Error(`${featureId}.${key} is missing a numeric max`);
+    return field.max;
+  }
+
   it('keeps console status labels aligned with the Japanese UI spec', () => {
     const html = readFileSync(new URL('../dashboard/console.html', import.meta.url), 'utf8');
 
@@ -821,6 +827,60 @@ describe('console scheduler helpers', () => {
       limit: 10,
       dryRun: true,
     });
+  });
+
+  it('enforces catalog bulk limits in server-side console payloads', () => {
+    const targetEngage = createActionPayload(
+      getFeatureById('targetEngage'),
+      { targetUsername: '@target_user', likeCount: 999, delayMs: 1 },
+      'dryRun'
+    );
+    expect(targetEngage.operationConfig.likeCount).toBe(numberFieldMax('targetEngage', 'likeCount'));
+    expect(targetEngage.operationConfig.delayMs).toBe(2000);
+
+    for (const [featureId, config, key] of [
+      ['autoLike', { query: 'xactions', maxLikes: 999 }, 'maxLikes'],
+      ['followEngagers', { tweetUrl: 'https://x.com/source/status/1234567890', maxFollows: 999 }, 'maxFollows'],
+      ['keywordFollow', { query: 'xactions', maxFollows: 999 }, 'maxFollows'],
+      ['autoComment', { query: 'xactions', comment: '確認用コメント', maxComments: 999 }, 'maxComments'],
+    ]) {
+      const payload = createActionPayload(getFeatureById(featureId), config, 'dryRun');
+      expect(payload.operationConfig[key]).toBe(numberFieldMax(featureId, key));
+      expect(payload.jobConfig[key]).toBe(numberFieldMax(featureId, key));
+    }
+
+    for (const featureId of ['unfollowNonFollowers', 'unfollowEveryone']) {
+      const payload = createActionPayload(
+        getFeatureById(featureId),
+        { maxUsers: 999999, limit: 999999 },
+        'live'
+      );
+      expect(payload.operationConfig.maxUsers).toBe(numberFieldMax(featureId, 'maxUsers'));
+      expect(payload.operationConfig.limit).toBe(numberFieldMax(featureId, 'limit'));
+      expect(payload.jobConfig.maxUsers).toBe(numberFieldMax(featureId, 'maxUsers'));
+      expect(payload.jobConfig.limit).toBe(numberFieldMax(featureId, 'limit'));
+    }
+  });
+
+  it('keeps DM sending focused and caps user-authored DM bodies server-side', () => {
+    const sendDm = getFeatureById('sendDM');
+    expect(sendDm.fields.map((field) => field.key)).toEqual(['username', 'message']);
+
+    const longMessage = '長'.repeat(numberFieldMax('sendDM', 'message') + 50);
+    const payload = createActionPayload(
+      sendDm,
+      { username: '@target_user', message: longMessage },
+      'live'
+    );
+    expect(payload.operationConfig.messageLength).toBe(numberFieldMax('sendDM', 'message'));
+    expect(payload.jobConfig.message).toHaveLength(numberFieldMax('sendDM', 'message'));
+
+    const engage = createActionPayload(
+      getFeatureById('targetEngage'),
+      { targetUsername: '@target_user', dmMessage: longMessage },
+      'live'
+    );
+    expect(engage.jobConfig.dmMessage).toHaveLength(numberFieldMax('targetEngage', 'dmMessage'));
   });
 
   it('connects growth actions with safe console payloads', () => {

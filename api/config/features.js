@@ -64,7 +64,6 @@ const features = [
     fields: [
       { key: 'username', label: '送信先', type: 'username', required: true, placeholder: '@username' },
       { key: 'message', label: '本文', type: 'textarea', required: true, max: 1000 },
-      { key: 'delayMs', label: '実行間隔', type: 'number', min: 2000, max: 60000, step: 500, default: 3000, suffix: 'ms' },
     ],
   },
   {

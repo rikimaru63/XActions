@@ -40,6 +40,8 @@ function parseJson(value) {
   }
 }
 
+const MAX_DM_MESSAGE_LENGTH = 1000;
+
 function sanitizeConfig(value) {
   if (!value || typeof value !== 'object') return value;
   return Object.fromEntries(Object.entries(value).map(([key, item]) => {
@@ -89,7 +91,7 @@ function createActionPayload(feature, inputConfig, mode = 'dryRun', user = {}) {
       const targetUsername = normalizeUsername(config.targetUsername);
       const likeCount = asNumber(config.likeCount, 0, 0, 10);
       const follow = asBool(config.follow);
-      const dmMessage = String(config.dmMessage || '').trim();
+      const dmMessage = String(config.dmMessage || '').trim().slice(0, MAX_DM_MESSAGE_LENGTH);
       const delayMs = asNumber(config.delayMs, 3000, 2000, 60000);
 
       if (!targetUsername) throw new Error('対象ユーザーを入力してください。');
@@ -126,7 +128,7 @@ function createActionPayload(feature, inputConfig, mode = 'dryRun', user = {}) {
       }
 
       const targetUsername = normalizeUsername(config.username);
-      const dmMessage = String(config.message || '').trim();
+      const dmMessage = String(config.message || '').trim().slice(0, MAX_DM_MESSAGE_LENGTH);
 
       if (!targetUsername) throw new Error('送信先を入力してください。');
       if (!dmMessage) throw new Error('本文を入力してください。');
