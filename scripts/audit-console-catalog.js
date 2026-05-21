@@ -3,6 +3,8 @@ import { features, featureCategories, getPublicFeatureCatalog } from '../api/con
 import { createActionPayload } from '../api/services/consoleActions.js';
 import { calculateNextRunAt } from '../api/services/scheduleUtils.js';
 
+const verbose = process.env.XACTIONS_AUDIT_VERBOSE === 'true';
+
 const sampleConfigByFeature = {
   targetEngage: {
     targetUsername: 'target_user',
@@ -238,7 +240,12 @@ function auditCatalog() {
   }
 
   if (missing.length) {
-    return { ok: false, missing, payloads };
+    return {
+      ok: false,
+      missing,
+      payloadCount: payloads.length,
+      ...(verbose ? { payloads } : {}),
+    };
   }
 
   return {
@@ -252,7 +259,8 @@ function auditCatalog() {
       available: category.available,
     })),
     queueTypes: [...new Set(consoleFeatures.map((feature) => feature.queueType || feature.operationType))].sort(),
-    payloads,
+    payloadCount: payloads.length,
+    ...(verbose ? { payloads } : {}),
   };
 }
 

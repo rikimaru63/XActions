@@ -1,3 +1,6 @@
+import 'dotenv/config';
+import jwt from 'jsonwebtoken';
+import { PrismaClient } from '@prisma/client';
 import puppeteer from 'puppeteer-extra';
 import StealthPlugin from 'puppeteer-extra-plugin-stealth';
 import { puppeteerLaunchOptions } from '../src/puppeteerLaunchOptions.js';
@@ -6,11 +9,24 @@ puppeteer.use(StealthPlugin());
 
 const baseUrl = (process.env.XACTIONS_BASE_URL || 'http://localhost:3001').replace(/\/$/, '');
 const token = process.env.XACTIONS_SMOKE_TOKEN || '';
-const username = process.env.XACTIONS_SMOKE_USERNAME || '';
+const username = process.env.XACTIONS_SMOKE_USERNAME || 'test_account_20260521092255';
 const password = process.env.XACTIONS_SMOKE_PASSWORD || '';
 
 async function resolveToken() {
   if (token) return token;
+  if (username && process.env.JWT_SECRET) {
+    const prisma = new PrismaClient();
+    try {
+      const user = await prisma.user.findUnique({
+        where: { username },
+        select: { id: true },
+      });
+      if (!user) throw new Error(`Smoke user not found: ${username}`);
+      return jwt.sign({ userId: user.id }, process.env.JWT_SECRET, { expiresIn: '20m' });
+    } finally {
+      await prisma.$disconnect();
+    }
+  }
   if (!username || !password) {
     throw new Error('Set XACTIONS_SMOKE_TOKEN or XACTIONS_SMOKE_USERNAME/XACTIONS_SMOKE_PASSWORD.');
   }
