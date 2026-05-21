@@ -3,6 +3,7 @@ import { PrismaClient } from '@prisma/client';
 import { authMiddleware } from '../middleware/auth.js';
 import { getTwitterClient } from './twitter.js';
 import { queueJob } from '../services/jobQueue.js';
+import { sanitizeOperation } from '../services/consoleActions.js';
 
 // Payment routes archived - XActions is now 100% free and open-source
 // All credit checks have been removed - unlimited operations for all users
@@ -153,7 +154,7 @@ router.get('/status/:operationId', async (req, res) => {
       return res.status(404).json({ error: 'Operation not found' });
     }
 
-    res.json(operation);
+    res.json(sanitizeOperation(operation));
   } catch (error) {
     console.error('Operation status error:', error);
     res.status(500).json({ error: 'Failed to fetch operation status' });
@@ -210,7 +211,7 @@ router.get('/', async (req, res) => {
     ]);
 
     res.json({
-      operations,
+      operations: operations.map(sanitizeOperation),
       pagination: {
         total,
         page: parseInt(page),

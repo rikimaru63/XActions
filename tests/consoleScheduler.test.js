@@ -18,6 +18,7 @@ import {
   createActionPayload,
   operationMatchesFeatureHistory,
   sanitizeConfig,
+  sanitizeOperation,
 } from '../api/services/consoleActions.js';
 import {
   buildEncryptedRetryConfig,
@@ -449,6 +450,28 @@ describe('console scheduler helpers', () => {
     expect(route).toContain('messageLength: String(message).length');
     expect(route).toContain('hasMessage: true');
     expect(route).not.toContain('config: JSON.stringify({ username, message })');
+  });
+
+  it('redacts raw configs from legacy operation status and list routes', () => {
+    const route = readFileSync(new URL('../api/routes/operations.js', import.meta.url), 'utf8');
+    const sanitized = sanitizeOperation({
+      config: JSON.stringify({
+        message: 'private dm body',
+        text: 'private post body',
+        sessionCookie: 'auth_token=secret',
+        keep: 'visible',
+      }),
+    });
+
+    expect(route).toContain("import { sanitizeOperation } from '../services/consoleActions.js'");
+    expect(route).toContain('res.json(sanitizeOperation(operation))');
+    expect(route).toContain('operations: operations.map(sanitizeOperation)');
+    expect(sanitized.config).toEqual({
+      message: '[hidden]',
+      text: '[hidden]',
+      sessionCookie: '[hidden]',
+      keep: 'visible',
+    });
   });
 
   it('keeps legacy DM route responses user-facing in Japanese', () => {

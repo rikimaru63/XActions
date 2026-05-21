@@ -36,6 +36,7 @@ function auditStaticAcceptance() {
   const dashboard = read('dashboard/console.html');
   const server = read('api/server.js');
   const consoleRoute = read('api/routes/console.js');
+  const operationsRoute = read('api/routes/operations.js');
   const accountsRoute = read('api/routes/accounts.js');
   const messagesRoute = read('api/routes/messages.js');
   const sessionAuthRoute = read('api/routes/session-auth.js');
@@ -192,6 +193,12 @@ function auditStaticAcceptance() {
     legacyDmStorageMissing.push('legacy DM route stores full message in Operation.config');
   }
 
+  const legacyOperationRedactionMissing = hasAll(operationsRoute, [
+    "import { sanitizeOperation } from '../services/consoleActions.js'",
+    'res.json(sanitizeOperation(operation))',
+    'operations: operations.map(sanitizeOperation)',
+  ]);
+
   const workerRestartMissing = hasAll(workerRestartHost + productionSmoke, [
     'docker stop',
     'docker start',
@@ -328,6 +335,13 @@ function auditStaticAcceptance() {
       legacyDmStorageMissing.length === 0,
       { route: 'api/routes/messages.js' },
       legacyDmStorageMissing
+    ),
+    item(
+      'legacy-operation-redaction',
+      'Legacy operation status and list routes return sanitized configs instead of raw operation payloads.',
+      legacyOperationRedactionMissing.length === 0,
+      { route: 'api/routes/operations.js' },
+      legacyOperationRedactionMissing
     ),
     item(
       'production-smoke',
