@@ -66,10 +66,12 @@ This intentionally stops only the XActions worker container, creates a due
 dry-run schedule while the worker is stopped, starts the same worker container,
 and verifies the schedule is completed from the database.
 
+It is disabled in the default production smoke because it briefly stops the
+worker. Enable it explicitly when validating restart recovery:
+
 ```bash
-api="$(docker ps --format '{{.Names}}' | grep '^api-sg008w80csw08skkwcwswwgw' | head -n 1)"
-docker cp "$api":/app/scripts/smoke-console-worker-restart-host.sh /tmp/xactions-worker-restart-smoke.sh
-bash /tmp/xactions-worker-restart-smoke.sh
+XACTIONS_PRODUCTION_WORKER_RESTART_SMOKE=always \
+bash /tmp/xactions-console-production-smoke.sh
 ```
 
 Live readonly mode:

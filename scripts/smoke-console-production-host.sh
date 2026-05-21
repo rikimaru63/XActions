@@ -7,6 +7,7 @@ SMOKE_USERNAME="${XACTIONS_SMOKE_USERNAME:-test_account_20260521092255}"
 API_CONTAINER="${XACTIONS_API_CONTAINER:-}"
 WORKER_CONTAINER="${XACTIONS_WORKER_CONTAINER:-}"
 SCHEDULER_SMOKE_MODE="${XACTIONS_PRODUCTION_SCHEDULER_SMOKE:-auto}"
+WORKER_RESTART_SMOKE_MODE="${XACTIONS_PRODUCTION_WORKER_RESTART_SMOKE:-never}"
 LIVE_READONLY_MODE="${XACTIONS_PRODUCTION_LIVE_READONLY:-auto}"
 
 find_container() {
@@ -28,6 +29,14 @@ case "$SCHEDULER_SMOKE_MODE" in
   auto|always|never) ;;
   *)
     echo "XACTIONS_PRODUCTION_SCHEDULER_SMOKE must be auto, always, or never." >&2
+    exit 1
+    ;;
+esac
+
+case "$WORKER_RESTART_SMOKE_MODE" in
+  always|never) ;;
+  *)
+    echo "XACTIONS_PRODUCTION_WORKER_RESTART_SMOKE must be always or never." >&2
     exit 1
     ;;
 esac
@@ -60,6 +69,7 @@ echo "baseUrl=${BASE_URL}"
 echo "apiContainer=${API_CONTAINER}"
 echo "workerContainer=${WORKER_CONTAINER}"
 echo "schedulerSmokeMode=${SCHEDULER_SMOKE_MODE}"
+echo "workerRestartSmokeMode=${WORKER_RESTART_SMOKE_MODE}"
 echo "liveReadonlyMode=${LIVE_READONLY_MODE}"
 
 health_body="$(curl -fsS "${BASE_URL}/api/health")"
@@ -228,6 +238,23 @@ maybe_run_scheduler_smoke() {
 }
 
 maybe_run_scheduler_smoke
+
+maybe_run_worker_restart_smoke() {
+  if [[ "$WORKER_RESTART_SMOKE_MODE" == "never" ]]; then
+    echo "skip worker restart smoke: disabled by XACTIONS_PRODUCTION_WORKER_RESTART_SMOKE=never"
+    return 0
+  fi
+
+  docker cp "$API_CONTAINER":/app/scripts/smoke-console-worker-restart-host.sh /tmp/xactions-worker-restart-smoke.sh
+  XACTIONS_COOLIFY_APP_UUID="$APP_UUID" \
+    XACTIONS_SMOKE_USERNAME="$SMOKE_USERNAME" \
+    XACTIONS_API_CONTAINER="$API_CONTAINER" \
+    XACTIONS_WORKER_CONTAINER="$WORKER_CONTAINER" \
+    bash /tmp/xactions-worker-restart-smoke.sh
+  echo "ok worker restart smoke"
+}
+
+maybe_run_worker_restart_smoke
 
 host_has_live_cookies() {
   [[ -n "${XACTIONS_LIVE_ACCOUNT_A_COOKIE:-}" && -n "${XACTIONS_LIVE_ACCOUNT_B_COOKIE:-}" ]]
