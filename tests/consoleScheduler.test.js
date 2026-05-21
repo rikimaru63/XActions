@@ -1,7 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { getFeatureById, getPublicFeatureCatalog } from '../api/config/features.js';
 import { shouldSerializeAccountJob } from '../api/services/accountExecutionLock.js';
-import { explicitAccountIdsFromBody } from '../api/services/accountSelection.js';
+import {
+  assertAccountSelectionLimit,
+  explicitAccountIdsFromBody,
+  MAX_ACCOUNT_SELECTION,
+} from '../api/services/accountSelection.js';
 import { isSessionExpiredError } from '../api/services/accountStore.js';
 import { createActionPayload, sanitizeConfig } from '../api/services/consoleActions.js';
 import {
@@ -119,6 +123,10 @@ describe('console scheduler helpers', () => {
     expect(explicitAccountIdsFromBody({ accountId: 'acc_1' })).toEqual(['acc_1']);
     expect(explicitAccountIdsFromBody({ accountIds: ['acc_1', 'acc_1', ' acc_2 '] })).toEqual(['acc_1', 'acc_2']);
     expect(explicitAccountIdsFromBody({})).toEqual([]);
+    expect(() => assertAccountSelectionLimit(['acc_1', 'acc_2'])).not.toThrow();
+    expect(() => assertAccountSelectionLimit(['acc_1', 'acc_2', 'acc_3'])).toThrow(
+      `一度に選べるXアカウントは${MAX_ACCOUNT_SELECTION}件までです。`
+    );
   });
 
   it('stores batch retry inputs encrypted and hides them from history output', () => {

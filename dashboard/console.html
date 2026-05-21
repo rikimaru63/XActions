@@ -752,6 +752,8 @@
       selectedAccountIds: [],
     };
 
+    const MAX_ACCOUNT_SELECTION = 2;
+
     const els = {
       accountName: document.getElementById('account-name'),
       accountState: document.getElementById('account-state'),
@@ -865,10 +867,14 @@
       return state.accounts.filter((account) => account.status === 'active');
     }
 
+    function limitAccountSelection(ids) {
+      return [...new Set(ids.filter(Boolean))].slice(0, MAX_ACCOUNT_SELECTION);
+    }
+
     function syncSelectedAccounts() {
       const active = activeAccounts();
       const valid = new Set(active.map((account) => account.id));
-      state.selectedAccountIds = state.selectedAccountIds.filter((id) => valid.has(id));
+      state.selectedAccountIds = limitAccountSelection(state.selectedAccountIds.filter((id) => valid.has(id)));
       if (!state.selectedAccountIds.length && active.length) {
         const defaultAccount = active.find((account) => account.isDefault) || active[0];
         state.selectedAccountIds = [defaultAccount.id];
@@ -877,7 +883,16 @@
 
     function collectAccountIds(scope) {
       const checked = [...scope.querySelectorAll('[data-account-choice]:checked')].map((input) => input.value);
-      return checked.length ? checked : state.selectedAccountIds;
+      return limitAccountSelection(checked.length ? checked : state.selectedAccountIds);
+    }
+
+    function updateAccountChoiceLocks(scope, selector) {
+      const inputs = [...scope.querySelectorAll(selector)];
+      const selectedCount = inputs.filter((input) => input.checked).length;
+      inputs.forEach((input) => {
+        if (input.dataset.disabledByStatus === 'true') return;
+        input.disabled = !input.checked && selectedCount >= MAX_ACCOUNT_SELECTION;
+      });
     }
 
     function accountQuery(selected) {
@@ -895,11 +910,11 @@
 
       return `
         <div class="field">
-          <label>実行アカウント</label>
+          <label>実行アカウント（最大${MAX_ACCOUNT_SELECTION}件）</label>
           <div class="account-picker">
             ${activeAccounts().map((account) => `
               <label class="account-choice">
-                <input type="checkbox" data-account-choice value="${escapeHtml(account.id)}" ${state.selectedAccountIds.includes(account.id) ? 'checked' : ''}>
+                <input type="checkbox" data-account-choice value="${escapeHtml(account.id)}" ${state.selectedAccountIds.includes(account.id) ? 'checked' : ''} ${!state.selectedAccountIds.includes(account.id) && state.selectedAccountIds.length >= MAX_ACCOUNT_SELECTION ? 'disabled' : ''}>
                 <span class="account-meta">
                   <strong>@${escapeHtml(account.username)}</strong>
                   <span>${account.isDefault ? 'デフォルト' : account.statusLabel}</span>
@@ -914,12 +929,19 @@
     function bindAccountPicker(scope) {
       scope.querySelectorAll('[data-account-choice]').forEach((input) => {
         input.addEventListener('change', () => {
-          state.selectedAccountIds = [...scope.querySelectorAll('[data-account-choice]:checked')].map((item) => item.value);
+          const checked = [...scope.querySelectorAll('[data-account-choice]:checked')].map((item) => item.value);
+          if (checked.length > MAX_ACCOUNT_SELECTION) {
+            input.checked = false;
+            setStatus(scope, `実行アカウントは最大${MAX_ACCOUNT_SELECTION}件まで選択できます。`, 'err');
+          }
+          state.selectedAccountIds = collectAccountIds(scope);
+          updateAccountChoiceLocks(scope, '[data-account-choice]');
           const selected = feature();
           if (selected && state.selectedTab === 'schedule') loadSchedules(selected);
           if (selected && state.selectedTab === 'history') loadHistory();
         });
       });
+      updateAccountChoiceLocks(scope, '[data-account-choice]');
     }
 
     function renderAccount() {
@@ -937,17 +959,22 @@
       els.accountState.textContent = `${state.accounts.length}件 / ${activeAccounts().length}件が実行可能`;
       els.accountList.innerHTML = state.accounts.map((account) => `
         <label class="account-item">
-          <input type="checkbox" value="${escapeHtml(account.id)}" ${state.selectedAccountIds.includes(account.id) ? 'checked' : ''} ${account.status !== 'active' ? 'disabled' : ''}>
+          <input type="checkbox" data-account-sidebar-choice value="${escapeHtml(account.id)}" ${state.selectedAccountIds.includes(account.id) ? 'checked' : ''} ${account.status !== 'active' ? 'disabled' : ''} ${account.status !== 'active' ? 'data-disabled-by-status="true"' : ''}>
           <span class="account-meta">
             <strong>@${escapeHtml(account.username)}</strong>
             <span>${escapeHtml(account.isDefault ? 'デフォルト' : account.statusLabel)}</span>
           </span>
         </label>
       `).join('');
+      updateAccountChoiceLocks(els.accountList, '[data-account-sidebar-choice]');
 
-      els.accountList.querySelectorAll('input[type="checkbox"]').forEach((input) => {
+      els.accountList.querySelectorAll('[data-account-sidebar-choice]').forEach((input) => {
         input.addEventListener('change', () => {
-          state.selectedAccountIds = [...els.accountList.querySelectorAll('input[type="checkbox"]:checked')].map((item) => item.value);
+          const checked = [...els.accountList.querySelectorAll('[data-account-sidebar-choice]:checked')].map((item) => item.value);
+          if (checked.length > MAX_ACCOUNT_SELECTION) {
+            input.checked = false;
+          }
+          state.selectedAccountIds = limitAccountSelection([...els.accountList.querySelectorAll('[data-account-sidebar-choice]:checked')].map((item) => item.value));
           renderDetail();
         });
       });

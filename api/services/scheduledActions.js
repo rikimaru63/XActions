@@ -12,7 +12,10 @@ import {
   listAccountsForUser,
   sanitizeAccount,
 } from './accountStore.js';
-import { explicitAccountIdsFromBody } from './accountSelection.js';
+import {
+  assertAccountSelectionLimit,
+  explicitAccountIdsFromBody,
+} from './accountSelection.js';
 import { decrypt, encrypt } from './sessionCrypto.js';
 import { calculateNextRunAt, normalizeScheduleInput } from './scheduleUtils.js';
 import {
@@ -104,6 +107,7 @@ async function resolveAccountIds(user, feature, body) {
 
   const accounts = await listAccountsForUser(user);
   const requested = explicitAccountIdsFromBody(body);
+  assertAccountSelectionLimit(requested);
 
   if (!requested.length) {
     throw new Error(accounts.length

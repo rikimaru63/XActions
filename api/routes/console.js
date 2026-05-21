@@ -14,7 +14,10 @@ import {
   sanitizeOperation,
 } from '../services/consoleActions.js';
 import { listAccountsForUser } from '../services/accountStore.js';
-import { explicitAccountIdsFromBody } from '../services/accountSelection.js';
+import {
+  assertAccountSelectionLimit,
+  explicitAccountIdsFromBody,
+} from '../services/accountSelection.js';
 import {
   buildEncryptedRetryConfig,
   recoverRetryConfig,
@@ -31,6 +34,7 @@ async function resolveExecutionAccounts(req, feature) {
 
   const accounts = await listAccountsForUser(req.user);
   const requested = explicitAccountIdsFromBody(req.body);
+  assertAccountSelectionLimit(requested);
 
   if (!requested.length) {
     const error = new Error(accounts.length
@@ -360,6 +364,7 @@ router.post('/actions/retry-failed', async (req, res) => {
     const failedAccounts = parent.childOperations
       .filter((operation) => operation.account?.status === 'active')
       .map((operation) => operation.accountId);
+    assertAccountSelectionLimit([...new Set(failedAccounts)]);
 
     if (!failedAccounts.length) {
       return res.status(400).json({ error: '失敗したXアカウントが実行できる状態ではありません。' });
