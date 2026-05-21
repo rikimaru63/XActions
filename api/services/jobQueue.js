@@ -27,13 +27,18 @@ import {
 } from './operations/puppeteer/posting.js';
 import { targetEngageBrowser } from './operations/puppeteer/targetEngage.js';
 import browserAutomation, {
+  scrapeFollowers,
+  scrapeFollowing,
+  scrapeHashtag,
+  scrapeMedia,
   scrapeProfile,
+  scrapeTweets,
   searchTweets as searchTweetsWithCookie,
 } from './browserAutomation.js';
 import { extractThread, formatAsMarkdown, formatAsText } from './threadExtractor.js';
 import { extractVideo } from './videoExtractor.js';
 import { getBookmarks } from '../../src/bookmarkManager.js';
-import { getTrends } from '../../src/discoveryExplore.js';
+import { getExploreFeed, getTrends } from '../../src/discoveryExplore.js';
 import { exportConversation, getConversations } from '../../src/dmManager.js';
 import { bookmarkTweet, replyToTweet } from '../../src/engagementManager.js';
 import { deletePost } from '../../src/postComposer.js';
@@ -837,11 +842,49 @@ operationsQueue.process('getProfile', 2, async (job) => {
   return scrapeProfile(config.sessionCookie, config.username);
 });
 
+operationsQueue.process('getFollowers', 1, async (job) => {
+  console.log(`🔄 Processing job ${job.id}: getFollowers`);
+
+  const config = await resolveJobConfig(job);
+  return scrapeFollowers(config.sessionCookie, config.username, {
+    limit: config.limit,
+  });
+});
+
+operationsQueue.process('getFollowing', 1, async (job) => {
+  console.log(`🔄 Processing job ${job.id}: getFollowing`);
+
+  const config = await resolveJobConfig(job);
+  return scrapeFollowing(config.sessionCookie, config.username, {
+    limit: config.limit,
+  });
+});
+
+operationsQueue.process('getTweets', 1, async (job) => {
+  console.log(`🔄 Processing job ${job.id}: getTweets`);
+
+  const config = await resolveJobConfig(job);
+  return scrapeTweets(config.sessionCookie, config.username, {
+    limit: config.limit,
+    includeReplies: config.includeReplies,
+  });
+});
+
 operationsQueue.process('searchTweets', 2, async (job) => {
   console.log(`🔄 Processing job ${job.id}: searchTweets`);
 
   const config = await resolveJobConfig(job);
   return searchTweetsWithCookie(config.sessionCookie, config.query, {
+    limit: config.limit,
+    filter: config.filter,
+  });
+});
+
+operationsQueue.process('searchHashtag', 1, async (job) => {
+  console.log(`🔄 Processing job ${job.id}: searchHashtag`);
+
+  const config = await resolveJobConfig(job);
+  return scrapeHashtag(config.sessionCookie, config.hashtag, {
     limit: config.limit,
     filter: config.filter,
   });
@@ -854,6 +897,21 @@ operationsQueue.process('getTrends', 1, async (job) => {
   const page = await browserAutomation.createPage(config.sessionCookie);
   try {
     return getTrends(page, { location: config.category || 'global' });
+  } finally {
+    await page.close();
+  }
+});
+
+operationsQueue.process('getExploreFeed', 1, async (job) => {
+  console.log(`🔄 Processing job ${job.id}: getExploreFeed`);
+
+  const config = await resolveJobConfig(job);
+  const page = await browserAutomation.createPage(config.sessionCookie);
+  try {
+    return getExploreFeed(page, {
+      tab: config.tab,
+      limit: config.limit,
+    });
   } finally {
     await page.close();
   }
@@ -872,6 +930,16 @@ operationsQueue.process('getBookmarks', 1, async (job) => {
   } finally {
     await page.close();
   }
+});
+
+operationsQueue.process('getMedia', 1, async (job) => {
+  console.log(`🔄 Processing job ${job.id}: getMedia`);
+
+  const config = await resolveJobConfig(job);
+  return scrapeMedia(config.sessionCookie, config.username, {
+    limit: config.limit,
+    type: config.type,
+  });
 });
 
 operationsQueue.process('getConversations', 1, async (job) => {

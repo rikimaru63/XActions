@@ -324,6 +324,52 @@ function createActionPayload(feature, inputConfig, mode = 'dryRun', user = {}) {
       };
     }
 
+    case 'getFollowers':
+    case 'getFollowing': {
+      const username = normalizeUsername(config.username || user.twitterUsername);
+      const limit = asNumber(config.limit, 100, 1, 5000);
+      if (!username) throw new Error('対象ユーザーを入力してください。');
+
+      return {
+        operationType: feature.operationType,
+        operationConfig: {
+          sourceFeatureId: feature.id,
+          username,
+          limit,
+          dryRun: true,
+        },
+        jobConfig: {
+          username,
+          limit,
+          dryRun: true,
+        },
+      };
+    }
+
+    case 'getTweets': {
+      const username = normalizeUsername(config.username || user.twitterUsername);
+      const limit = asNumber(config.limit, 50, 1, 500);
+      const includeReplies = asBool(config.includeReplies);
+      if (!username) throw new Error('対象ユーザーを入力してください。');
+
+      return {
+        operationType: 'getTweets',
+        operationConfig: {
+          sourceFeatureId: feature.id,
+          username,
+          limit,
+          includeReplies,
+          dryRun: true,
+        },
+        jobConfig: {
+          username,
+          limit,
+          includeReplies,
+          dryRun: true,
+        },
+      };
+    }
+
     case 'searchTweets': {
       const query = String(config.query || '').trim();
       const limit = asNumber(config.limit, 30, 1, 100);
@@ -348,6 +394,30 @@ function createActionPayload(feature, inputConfig, mode = 'dryRun', user = {}) {
       };
     }
 
+    case 'searchHashtag': {
+      const hashtag = String(config.hashtag || config.query || '').trim().replace(/^#/, '');
+      const limit = asNumber(config.limit, 50, 1, 500);
+      const filter = String(config.filter || 'latest').trim() || 'latest';
+      if (!hashtag) throw new Error('ハッシュタグを入力してください。');
+
+      return {
+        operationType: 'searchHashtag',
+        operationConfig: {
+          sourceFeatureId: feature.id,
+          hashtag,
+          limit,
+          filter,
+          dryRun: true,
+        },
+        jobConfig: {
+          hashtag,
+          limit,
+          filter,
+          dryRun: true,
+        },
+      };
+    }
+
     case 'getTrends': {
       const category = String(config.category || '').trim();
 
@@ -360,6 +430,29 @@ function createActionPayload(feature, inputConfig, mode = 'dryRun', user = {}) {
         },
         jobConfig: {
           category,
+          dryRun: true,
+        },
+      };
+    }
+
+    case 'getExploreFeed': {
+      const requestedTab = String(config.tab || 'foryou').trim().toLowerCase();
+      const tab = ['foryou', 'trending', 'news', 'sports', 'entertainment'].includes(requestedTab)
+        ? requestedTab
+        : 'foryou';
+      const limit = asNumber(config.limit, 30, 1, 100);
+
+      return {
+        operationType: 'getExploreFeed',
+        operationConfig: {
+          sourceFeatureId: feature.id,
+          tab,
+          limit,
+          dryRun: true,
+        },
+        jobConfig: {
+          tab,
+          limit,
           dryRun: true,
         },
       };
@@ -380,6 +473,31 @@ function createActionPayload(feature, inputConfig, mode = 'dryRun', user = {}) {
         jobConfig: {
           limit,
           format,
+          dryRun: true,
+        },
+      };
+    }
+
+    case 'getMedia': {
+      const username = normalizeUsername(config.username || user.twitterUsername);
+      const limit = asNumber(config.limit, 50, 1, 500);
+      const requestedType = String(config.type || 'all').trim().toLowerCase();
+      const type = ['all', 'images', 'videos'].includes(requestedType) ? requestedType : 'all';
+      if (!username) throw new Error('対象ユーザーを入力してください。');
+
+      return {
+        operationType: 'getMedia',
+        operationConfig: {
+          sourceFeatureId: feature.id,
+          username,
+          limit,
+          type,
+          dryRun: true,
+        },
+        jobConfig: {
+          username,
+          limit,
+          type,
           dryRun: true,
         },
       };

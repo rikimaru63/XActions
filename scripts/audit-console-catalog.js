@@ -92,16 +92,42 @@ const sampleConfigByFeature = {
   profile: {
     username: 'target_user',
   },
+  followers: {
+    username: 'target_user',
+    limit: 1,
+  },
+  following: {
+    username: 'target_user',
+    limit: 1,
+  },
+  tweets: {
+    username: 'target_user',
+    limit: 1,
+    includeReplies: true,
+  },
   searchTweets: {
     query: 'xactions',
+    limit: 1,
+  },
+  hashtag: {
+    hashtag: '#xactions',
     limit: 1,
   },
   trends: {
     category: 'global',
   },
+  explore: {
+    tab: 'trending',
+    limit: 1,
+  },
   bookmarks: {
     limit: 1,
     format: 'json',
+  },
+  media: {
+    username: 'target_user',
+    limit: 1,
+    type: 'images',
   },
   spaces: {
     mode: 'live',

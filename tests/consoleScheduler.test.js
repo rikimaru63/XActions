@@ -313,12 +313,30 @@ describe('console scheduler helpers', () => {
   });
 
   it('connects read-only collection actions to the console catalog', () => {
-    for (const id of ['getProfile', 'searchTweets', 'getTrends', 'getBookmarks', 'getConversations']) {
+    for (const id of [
+      'getProfile',
+      'getFollowers',
+      'getFollowing',
+      'getTweets',
+      'searchTweets',
+      'searchHashtag',
+      'getTrends',
+      'getExploreFeed',
+      'getBookmarks',
+      'getMedia',
+      'getConversations',
+    ]) {
       const featureId = {
         getProfile: 'profile',
+        getFollowers: 'followers',
+        getFollowing: 'following',
+        getTweets: 'tweets',
         searchTweets: 'searchTweets',
+        searchHashtag: 'hashtag',
         getTrends: 'trends',
+        getExploreFeed: 'explore',
         getBookmarks: 'bookmarks',
+        getMedia: 'media',
         getConversations: 'conversations',
       }[id];
       expect(getFeatureById(featureId)).toMatchObject({
@@ -344,6 +362,51 @@ describe('console scheduler helpers', () => {
       },
     });
 
+    const followers = createActionPayload(
+      getFeatureById('followers'),
+      { username: '@target_user', limit: 20 },
+      'dryRun'
+    );
+    expect(followers).toMatchObject({
+      operationType: 'getFollowers',
+      jobConfig: {
+        username: 'target_user',
+        limit: 20,
+        dryRun: true,
+      },
+    });
+
+    const following = createActionPayload(
+      getFeatureById('following'),
+      { username: '@target_user', limit: 25 },
+      'live'
+    );
+    expect(following).toMatchObject({
+      operationType: 'getFollowing',
+      operationConfig: {
+        sourceFeatureId: 'following',
+        username: 'target_user',
+        limit: 25,
+        dryRun: true,
+      },
+    });
+
+    const tweets = createActionPayload(
+      getFeatureById('tweets'),
+      { username: '@target_user', limit: 15, includeReplies: 'true' },
+      'dryRun'
+    );
+    expect(tweets).toMatchObject({
+      operationType: 'getTweets',
+      operationConfig: {
+        sourceFeatureId: 'tweets',
+        username: 'target_user',
+        limit: 15,
+        includeReplies: true,
+        dryRun: true,
+      },
+    });
+
     const search = createActionPayload(
       getFeatureById('searchTweets'),
       { query: 'xactions', limit: 5, filter: 'top' },
@@ -355,6 +418,53 @@ describe('console scheduler helpers', () => {
         query: 'xactions',
         limit: 5,
         filter: 'top',
+        dryRun: true,
+      },
+    });
+
+    const hashtag = createActionPayload(
+      getFeatureById('hashtag'),
+      { hashtag: '#xactions', limit: 30, filter: 'top' },
+      'dryRun'
+    );
+    expect(hashtag).toMatchObject({
+      operationType: 'searchHashtag',
+      operationConfig: {
+        sourceFeatureId: 'hashtag',
+        hashtag: 'xactions',
+        limit: 30,
+        filter: 'top',
+        dryRun: true,
+      },
+    });
+
+    const explore = createActionPayload(
+      getFeatureById('explore'),
+      { tab: 'news', limit: 10 },
+      'dryRun'
+    );
+    expect(explore).toMatchObject({
+      operationType: 'getExploreFeed',
+      operationConfig: {
+        sourceFeatureId: 'explore',
+        tab: 'news',
+        limit: 10,
+        dryRun: true,
+      },
+    });
+
+    const media = createActionPayload(
+      getFeatureById('media'),
+      { username: '@target_user', limit: 12, type: 'videos' },
+      'dryRun'
+    );
+    expect(media).toMatchObject({
+      operationType: 'getMedia',
+      operationConfig: {
+        sourceFeatureId: 'media',
+        username: 'target_user',
+        limit: 12,
+        type: 'videos',
         dryRun: true,
       },
     });
