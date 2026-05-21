@@ -7,6 +7,7 @@ import StealthPlugin from 'puppeteer-extra-plugin-stealth';
 import fs from 'fs';
 import path from 'path';
 import { AntiDetection } from './antiDetection.js';
+import { puppeteerLaunchOptions } from '../puppeteerLaunchOptions.js';
 
 puppeteer.use(StealthPlugin());
 
@@ -93,11 +94,11 @@ class BrowserDriver {
     ];
     if (this.proxy) args.push(`--proxy-server=${this.proxy}`);
 
-    this.browser = await puppeteer.launch({
+    this.browser = await puppeteer.launch(puppeteerLaunchOptions({
       headless: this.headless ? 'new' : false,
       args,
       defaultViewport: this._fingerprint.viewport,
-    });
+    }));
 
     this.page = await this.browser.newPage();
     await this.page.setUserAgent(this._fingerprint.userAgent);

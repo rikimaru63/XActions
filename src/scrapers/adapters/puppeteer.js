@@ -9,6 +9,7 @@
  */
 
 import { BaseAdapter } from './base.js';
+import { puppeteerLaunchOptions } from '../../puppeteerLaunchOptions.js';
 
 export class PuppeteerAdapter extends BaseAdapter {
   name = 'puppeteer';
@@ -43,7 +44,7 @@ export class PuppeteerAdapter extends BaseAdapter {
 
   async launch(options = {}) {
     const puppeteer = await this.#getPuppeteer();
-    const browser = await puppeteer.launch({
+    const browser = await puppeteer.launch(puppeteerLaunchOptions({
       headless: options.headless !== false ? 'new' : false,
       args: [
         '--no-sandbox',
@@ -54,7 +55,7 @@ export class PuppeteerAdapter extends BaseAdapter {
       ],
       ...(options.proxy ? { args: [...(options.args || []), `--proxy-server=${options.proxy.server}`] } : {}),
       ...options,
-    });
+    }));
     return { _native: browser, _adapter: this.name };
   }
 

@@ -18,6 +18,7 @@
 import puppeteer from 'puppeteer-extra';
 import StealthPlugin from 'puppeteer-extra-plugin-stealth';
 import fs from 'fs/promises';
+import { puppeteerLaunchOptions } from '../../puppeteerLaunchOptions.js';
 
 puppeteer.use(StealthPlugin());
 
@@ -49,7 +50,7 @@ export async function createBrowser(options = {}) {
     return adapter.launch(adapterOptions);
   }
 
-  return puppeteer.launch({
+  return puppeteer.launch(puppeteerLaunchOptions({
     headless: options.headless !== false ? 'new' : false,
     args: [
       '--no-sandbox',
@@ -58,7 +59,7 @@ export async function createBrowser(options = {}) {
       '--disable-web-security',
     ],
     ...options,
-  });
+  }));
 }
 
 /**

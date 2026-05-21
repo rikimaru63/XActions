@@ -18,6 +18,7 @@
 
 import puppeteer from 'puppeteer-extra';
 import StealthPlugin from 'puppeteer-extra-plugin-stealth';
+import { puppeteerLaunchOptions } from '../../src/puppeteerLaunchOptions.js';
 
 puppeteer.use(StealthPlugin());
 
@@ -31,7 +32,7 @@ const POOL_SIZE = 2;
 const browsers = [];
 
 async function createBrowser() {
-  return puppeteer.launch({
+  return puppeteer.launch(puppeteerLaunchOptions({
     headless: 'new',
     args: [
       '--no-sandbox',
@@ -44,7 +45,7 @@ async function createBrowser() {
       '--disable-blink-features=AutomationControlled',
       '--window-size=1920,1080',
     ],
-  });
+  }));
 }
 
 async function getBrowser() {

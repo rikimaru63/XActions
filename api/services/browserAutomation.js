@@ -10,6 +10,7 @@
 
 import puppeteer from 'puppeteer-extra';
 import StealthPlugin from 'puppeteer-extra-plugin-stealth';
+import { puppeteerLaunchOptions } from '../../src/puppeteerLaunchOptions.js';
 
 // Add stealth plugin to avoid detection
 puppeteer.use(StealthPlugin());
@@ -66,7 +67,7 @@ let browserInstance = null;
  */
 async function getBrowser() {
   if (!browserInstance) {
-    browserInstance = await puppeteer.launch({
+    browserInstance = await puppeteer.launch(puppeteerLaunchOptions({
       headless: 'new',
       args: [
         '--no-sandbox',
@@ -79,7 +80,7 @@ async function getBrowser() {
         '--disable-blink-features=AutomationControlled',
         '--window-size=1920,1080'
       ]
-    });
+    }));
   }
   return browserInstance;
 }
