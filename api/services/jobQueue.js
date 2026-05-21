@@ -45,6 +45,10 @@ const operationsQueue = new Queue('operations', {
   }
 });
 
+for (const client of [operationsQueue.client, operationsQueue.eclient, operationsQueue.bclient]) {
+  client?.setMaxListeners?.(50);
+}
+
 /**
  * Add a new job to the queue
  * @param {string} type - Job type (operation name)
@@ -554,6 +558,26 @@ operationsQueue.on('completed', async (job, result) => {
       console.error(`Failed to mark scheduled run completed: ${job.id}`, error);
     });
   }
+
+  if (job.data.scheduledActionId && job.data.scheduledTrigger === 'due') {
+    const schedule = await prisma.scheduledAction.findUnique({
+      where: { id: job.data.scheduledActionId },
+      select: { id: true, scheduleType: true },
+    }).catch(() => null);
+
+    if (schedule) {
+      await prisma.scheduledAction.update({
+        where: { id: schedule.id },
+        data: {
+          status: schedule.scheduleType === 'once' ? 'completed' : 'active',
+          failureCount: 0,
+          lastError: null,
+        },
+      }).catch((error) => {
+        console.error(`Failed to update scheduled action completion state: ${job.id}`, error);
+      });
+    }
+  }
 });
 
 operationsQueue.on('failed', async (job, err) => {
@@ -583,20 +607,23 @@ operationsQueue.on('failed', async (job, err) => {
     });
   }
 
-  if (job.data.scheduledActionId) {
+  if (job.data.scheduledActionId && job.data.scheduledTrigger === 'due') {
     const schedule = await prisma.scheduledAction.findUnique({
       where: { id: job.data.scheduledActionId },
-      select: { id: true, failureCount: true, maxRetries: true, status: true },
+      select: { id: true, failureCount: true, maxRetries: true, status: true, scheduleType: true },
     }).catch(() => null);
 
     if (schedule) {
       const nextFailureCount = (schedule.failureCount || 0) + 1;
+      const nextStatus = schedule.scheduleType === 'once'
+        ? 'failed'
+        : nextFailureCount > (schedule.maxRetries || 2) ? 'failed' : schedule.status;
       await prisma.scheduledAction.update({
         where: { id: schedule.id },
         data: {
           failureCount: nextFailureCount,
           lastError: err.message,
-          status: nextFailureCount > (schedule.maxRetries || 2) ? 'failed' : schedule.status,
+          status: nextStatus,
         },
       }).catch((error) => {
         console.error(`Failed to update scheduled action failure state: ${job.id}`, error);

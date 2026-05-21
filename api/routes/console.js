@@ -88,6 +88,24 @@ router.get('/history', async (req, res) => {
 
     const operations = await prisma.operation.findMany({
       where,
+      include: {
+        account: {
+          select: {
+            id: true,
+            username: true,
+            displayName: true,
+            status: true,
+            isDefault: true,
+          },
+        },
+        scheduledAction: {
+          select: {
+            id: true,
+            name: true,
+            status: true,
+          },
+        },
+      },
       orderBy: { createdAt: 'desc' },
       take: sourceFeatureId === 'sendDM' ? Math.min(limit * 3, 100) : limit,
     });

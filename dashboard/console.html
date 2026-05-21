@@ -1208,7 +1208,7 @@
                 <div class="history-top">
                   <div>
                     <div class="history-title">${escapeHtml(jaStatus(operation.status))}</div>
-                    <div class="history-meta">${escapeHtml(timeText(operation.createdAt))}</div>
+                    <div class="history-meta">${escapeHtml(historyMeta(operation))}</div>
                   </div>
                   <span class="badge ${operation.status === 'completed' ? 'available' : operation.status === 'failed' ? 'high' : ''}">${escapeHtml(operation.type)}</span>
                 </div>
@@ -1220,6 +1220,15 @@
       } catch (error) {
         els.historyPanel.innerHTML = `<div class="empty">${escapeHtml(error.message)}</div>`;
       }
+    }
+
+    function historyMeta(operation) {
+      const parts = [];
+      if (operation.account?.username) parts.push(`@${operation.account.username}`);
+      if (operation.scheduledAction?.name) parts.push(`予約: ${operation.scheduledAction.name}`);
+      if (operation.batchId) parts.push('複数アカウント');
+      parts.push(timeText(operation.createdAt));
+      return parts.filter(Boolean).join(' / ');
     }
 
     function summarizeConfig(config) {

@@ -187,6 +187,7 @@ async function enqueueScheduledAction(schedule, queueJobFn, options = {}) {
       operationId: operation.id,
       scheduledActionId: fullSchedule.id,
       scheduledActionRunId: run.id,
+      scheduledTrigger: options.advanceSchedule !== false ? 'due' : 'manual',
       userId: fullSchedule.userId,
       accountId: fullSchedule.accountId,
       authMethod: 'session',
@@ -199,7 +200,7 @@ async function enqueueScheduledAction(schedule, queueJobFn, options = {}) {
       await prisma.scheduledAction.update({
         where: { id: fullSchedule.id },
         data: {
-          status: isOnce ? 'completed' : 'active',
+          status: 'active',
           nextRunAt,
           lastRunAt: new Date(),
           lockedAt: null,
