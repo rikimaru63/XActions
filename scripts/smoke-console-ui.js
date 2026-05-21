@@ -31,6 +31,8 @@ function isIgnorableBadResponse(item) {
   return item.includes('/favicon.ico');
 }
 
+const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
 const authToken = await resolveToken();
 const browser = await puppeteer.launch(puppeteerLaunchOptions({
   headless: 'new',
@@ -39,6 +41,7 @@ const browser = await puppeteer.launch(puppeteerLaunchOptions({
 
 try {
   const page = await browser.newPage();
+  await page.setViewport({ width: 1440, height: 1000 });
   const pageErrors = [];
   const consoleErrors = [];
   const badResponses = [];
@@ -63,21 +66,99 @@ try {
   await page.waitForSelector('#feature-list .feature-row', { timeout: 30000 });
 
   const result = await page.evaluate(() => ({
+    lang: document.documentElement.lang,
     title: document.title,
     h1: document.querySelector('h1')?.textContent?.trim(),
     featureCount: document.querySelectorAll('#feature-list .feature-row').length,
     navCount: document.querySelectorAll('#category-nav button').length,
     detailTitle: document.querySelector('#detail-title')?.textContent?.trim(),
+    tabIds: [...document.querySelectorAll('.tabs button')].map((element) => element.dataset.tab),
     tabs: [...document.querySelectorAll('.tabs button')].map((element) => element.textContent.trim()),
     bodySample: document.body.textContent.replace(/\s+/g, ' ').trim().slice(0, 220),
   }));
 
+  const categories = await page.evaluate(() => [...document.querySelectorAll('#category-nav button')].map((button) => {
+    const [available, total] = (button.querySelector('.count')?.textContent || '0/0')
+      .split('/')
+      .map((value) => Number(value.trim()));
+    return {
+      id: button.dataset.category,
+      label: button.querySelector('span')?.textContent?.trim(),
+      available,
+      total,
+    };
+  }));
+
+  const categoryResults = [];
+  for (const category of categories) {
+    await page.click(`#category-nav [data-category="${category.id}"]`);
+    await page.waitForFunction(
+      (categoryId) => document.querySelector(`#category-nav [data-category="${categoryId}"]`)?.classList.contains('active'),
+      {},
+      category.id
+    );
+    await page.waitForSelector('#feature-list');
+
+    const categoryState = await page.evaluate(() => {
+      const rows = [...document.querySelectorAll('#feature-list .feature-row')].map((row) => ({
+        id: row.dataset.feature,
+        title: row.querySelector('.feature-title')?.textContent?.trim(),
+      }));
+      return {
+        rows,
+        selectedFeatureId: document.querySelector('#feature-list .feature-row.active')?.dataset.feature || null,
+        detailTitle: document.querySelector('#detail-title')?.textContent?.trim() || '',
+      };
+    });
+
+    if (categoryState.rows[0]) {
+      await page.click(`#feature-list [data-feature="${categoryState.rows[0].id}"]`);
+      await page.waitForFunction(
+        (featureId) => document.querySelector(`#feature-list [data-feature="${featureId}"]`)?.classList.contains('active'),
+        {},
+        categoryState.rows[0].id
+      );
+    }
+
+    const tabStates = [];
+    for (const tabId of ['settings', 'schedule', 'history']) {
+      await page.click(`.tabs [data-tab="${tabId}"]`);
+      await page.waitForFunction(
+        (id) => document.querySelector(`.tabs [data-tab="${id}"]`)?.classList.contains('active'),
+        {},
+        tabId
+      );
+      await delay(150);
+      tabStates.push(await page.evaluate((id) => {
+        const panel = document.querySelector(`#${id}-panel`);
+        return {
+          id,
+          visible: !!panel && !panel.classList.contains('hidden'),
+          textLength: panel?.textContent?.trim().length || 0,
+        };
+      }, tabId));
+    }
+
+    categoryResults.push({
+      ...category,
+      featureCount: categoryState.rows.length,
+      firstFeature: categoryState.rows[0]?.title || null,
+      tabStates,
+    });
+  }
+
+  const visitedFeatureTotal = categoryResults.reduce((total, category) => total + category.featureCount, 0);
   const blockingBadResponses = badResponses.filter((item) => !isIgnorableBadResponse(item));
   const blockingConsoleErrors = consoleErrors.filter((item) => !item.includes('Failed to load resource'));
   const ok = result.title.includes('コンソール')
     && result.h1 === 'コンソール'
+    && result.lang === 'ja'
     && result.navCount >= 10
     && result.featureCount > 0
+    && visitedFeatureTotal >= 33
+    && categoryResults.every((category) => category.featureCount === category.total)
+    && categoryResults.every((category) => category.tabStates.every((tab) => tab.visible && tab.textLength > 0))
+    && result.tabIds.join(',') === 'settings,schedule,history'
     && result.tabs.includes('設定')
     && result.tabs.includes('予約')
     && result.tabs.includes('履歴')
@@ -90,6 +171,8 @@ try {
     ok,
     baseUrl,
     result,
+    categoryResults,
+    visitedFeatureTotal,
     pageErrors,
     consoleErrors,
     badResponses,
