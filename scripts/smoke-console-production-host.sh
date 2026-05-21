@@ -131,6 +131,9 @@ try {
 }
 NODE
 
+docker exec "$API_CONTAINER" npm run verify:headless
+echo "ok headless browser"
+
 worker_status="$(docker inspect -f '{{.State.Status}}' "$WORKER_CONTAINER")"
 if [[ "$worker_status" != "running" ]]; then
   echo "worker container is not running: ${worker_status}" >&2

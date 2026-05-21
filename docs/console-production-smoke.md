@@ -9,6 +9,7 @@ This smoke checks the production items from `docs/console-scheduler-multiaccount
 - `/api/accounts`
 - `/api/console/features`
 - `/api/scheduled-actions`
+- headless Puppeteer / browserAutomation launch
 - worker container running
 - scheduler startup log
 - live readonly E2E readiness, and live E2E itself when real accounts/cookies are available
