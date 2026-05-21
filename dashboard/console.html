@@ -532,6 +532,21 @@
       margin-top: 18px;
     }
 
+    .run-list {
+      display: grid;
+      gap: 8px;
+      margin-top: 10px;
+      padding-top: 10px;
+      border-top: 1px solid var(--line-soft);
+    }
+
+    .run-item {
+      border: 1px solid var(--line-soft);
+      border-radius: var(--radius);
+      padding: 10px;
+      background: var(--bg);
+    }
+
     .schedule-actions {
       display: flex;
       gap: 8px;
@@ -787,7 +802,25 @@
         completed: '完了',
         failed: '失敗',
         cancelled: '停止',
+        paused: '停止中',
+        skipped: '見送り',
       }[status] || status || '-';
+    }
+
+    function scheduleStatusLabel(status) {
+      return {
+        active: '有効',
+        paused: '停止中',
+        completed: '完了',
+        failed: '失敗',
+      }[status] || status || '-';
+    }
+
+    function statusBadgeClass(status) {
+      if (status === 'completed' || status === 'active') return 'available';
+      if (status === 'failed' || status === 'expired' || status === 'error') return 'high';
+      if (status === 'paused' || status === 'cancelled' || status === 'skipped') return 'disabled';
+      return '';
     }
 
     function accountStatusClass(status) {
@@ -1322,14 +1355,17 @@
                 <div class="history-title">${escapeHtml(schedule.name)}</div>
                 <div class="history-meta">${escapeHtml(schedule.account?.username ? `@${schedule.account.username}` : 'アカウント未指定')} / 次回 ${escapeHtml(timeText(schedule.nextRunAt) || '-')}</div>
               </div>
-              <span class="badge ${schedule.status === 'active' ? 'available' : ''}">${escapeHtml(schedule.status)}</span>
+              <span class="badge ${statusBadgeClass(schedule.status)}">${escapeHtml(scheduleStatusLabel(schedule.status))}</span>
             </div>
-            <div class="history-meta">${escapeHtml(schedule.scheduleType)} / ${escapeHtml(schedule.mode === 'live' ? '実行' : '確認のみ')}</div>
+            <div class="history-meta">${escapeHtml(scheduleDetail(schedule))}</div>
+            ${schedule.lastError ? `<div class="history-meta">${escapeHtml(`失敗理由: ${schedule.lastError}`)}</div>` : ''}
             <div class="schedule-actions">
               <button type="button" data-run-now="${escapeHtml(schedule.id)}">今すぐ実行</button>
               <button type="button" data-toggle-schedule="${escapeHtml(schedule.id)}" data-status="${escapeHtml(schedule.status)}">${schedule.status === 'paused' ? '再開' : '停止'}</button>
+              <button type="button" data-load-runs="${escapeHtml(schedule.id)}">実行履歴</button>
               <button type="button" data-delete-schedule="${escapeHtml(schedule.id)}">削除</button>
             </div>
+            <div class="run-list hidden" data-schedule-runs="${escapeHtml(schedule.id)}"></div>
           </div>
         `).join('');
 
@@ -1339,12 +1375,68 @@
         list.querySelectorAll('[data-toggle-schedule]').forEach((button) => {
           button.addEventListener('click', () => toggleSchedule(button.dataset.toggleSchedule, button.dataset.status, selected));
         });
+        list.querySelectorAll('[data-load-runs]').forEach((button) => {
+          button.addEventListener('click', () => loadScheduleRuns(button.dataset.loadRuns));
+        });
         list.querySelectorAll('[data-delete-schedule]').forEach((button) => {
           button.addEventListener('click', () => deleteSchedule(button.dataset.deleteSchedule, selected));
         });
       } catch (error) {
         list.innerHTML = `<div class="empty">${escapeHtml(error.message)}</div>`;
       }
+    }
+
+    function scheduleDetail(schedule) {
+      const parts = [
+        schedule.scheduleType,
+        schedule.mode === 'live' ? '実行' : '確認のみ',
+        `再試行 ${schedule.failureCount || 0}/${schedule.maxRetries ?? 0}`,
+      ];
+      if (schedule.lastRunAt) parts.push(`前回 ${timeText(schedule.lastRunAt)}`);
+      return parts.filter(Boolean).join(' / ');
+    }
+
+    async function loadScheduleRuns(id) {
+      const list = document.querySelector(`[data-schedule-runs="${selectorValue(id)}"]`);
+      if (!list) return;
+
+      if (!list.classList.contains('hidden') && list.dataset.loaded === 'true') {
+        list.classList.add('hidden');
+        return;
+      }
+
+      list.classList.remove('hidden');
+      list.innerHTML = '<div class="empty">実行履歴を読み込み中</div>';
+      try {
+        const data = await apiRequest(`/scheduled-actions/${encodeURIComponent(id)}/runs?limit=10`);
+        list.dataset.loaded = 'true';
+        if (!data.runs.length) {
+          list.innerHTML = '<div class="empty">まだ実行履歴はありません。</div>';
+          return;
+        }
+
+        list.innerHTML = data.runs.map((run) => `
+          <div class="run-item">
+            <div class="history-top">
+              <div>
+                <div class="history-title">${escapeHtml(jaStatus(run.status))}</div>
+                <div class="history-meta">${escapeHtml(`予定 ${timeText(run.scheduledFor) || '-'}`)}</div>
+              </div>
+              <span class="badge ${statusBadgeClass(run.status)}">${escapeHtml(run.operationType || '予約')}</span>
+            </div>
+            <div class="history-meta">${escapeHtml(run.error || runTimeDetail(run))}</div>
+          </div>
+        `).join('');
+      } catch (error) {
+        list.innerHTML = `<div class="empty">${escapeHtml(error.message)}</div>`;
+      }
+    }
+
+    function runTimeDetail(run) {
+      const parts = [];
+      if (run.startedAt) parts.push(`開始 ${timeText(run.startedAt)}`);
+      if (run.finishedAt) parts.push(`終了 ${timeText(run.finishedAt)}`);
+      return parts.join(' / ') || '処理待ち';
     }
 
     async function runScheduleNow(id, selected) {
