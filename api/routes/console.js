@@ -15,6 +15,10 @@ import {
 } from '../services/consoleActions.js';
 import { listAccountsForUser } from '../services/accountStore.js';
 import { explicitAccountIdsFromBody } from '../services/accountSelection.js';
+import {
+  buildEncryptedRetryConfig,
+  recoverRetryConfig,
+} from '../services/consoleRetryConfig.js';
 import { createSchedulesFromRequest } from '../services/scheduledActions.js';
 
 const router = express.Router();
@@ -55,54 +59,55 @@ async function resolveExecutionAccounts(req, feature) {
 }
 
 function configFromOperation(featureId, operationConfig = {}, overrideConfig = {}) {
-  const config = { ...operationConfig, ...overrideConfig };
+  const config = recoverRetryConfig(operationConfig, overrideConfig);
 
   if (featureId === 'sendDM') {
     return {
-      username: overrideConfig.username || overrideConfig.targetUsername || operationConfig.targetUsername,
-      message: overrideConfig.message || overrideConfig.dmMessage,
-      delayMs: overrideConfig.delayMs ?? operationConfig.delayMs,
+      username: config.username || config.targetUsername,
+      message: config.message || config.dmMessage,
+      delayMs: config.delayMs,
     };
   }
 
   if (featureId === 'targetEngage') {
     return {
-      targetUsername: overrideConfig.targetUsername || operationConfig.targetUsername,
-      likeCount: overrideConfig.likeCount ?? operationConfig.likeCount,
-      follow: overrideConfig.follow ?? operationConfig.follow,
-      dmMessage: overrideConfig.dmMessage || overrideConfig.message || '',
-      delayMs: overrideConfig.delayMs ?? operationConfig.delayMs,
+      targetUsername: config.targetUsername,
+      likeCount: config.likeCount,
+      follow: config.follow,
+      dmMessage: config.dmMessage || config.message || '',
+      delayMs: config.delayMs,
     };
   }
 
   if (featureId === 'likeTweet' || featureId === 'unlikeTweet') {
     return {
-      tweetUrl: overrideConfig.tweetUrl || operationConfig.tweetUrl,
-      tweetId: overrideConfig.tweetId || operationConfig.tweetId,
+      tweetUrl: config.tweetUrl,
+      tweetId: config.tweetId,
     };
   }
 
   if (featureId === 'autoLike') {
     return {
-      query: overrideConfig.query ?? operationConfig.query,
-      targetUsername: overrideConfig.targetUsername ?? operationConfig.targetUsername,
-      maxLikes: overrideConfig.maxLikes ?? operationConfig.maxLikes,
+      query: config.query,
+      targetUsername: config.targetUsername,
+      maxLikes: config.maxLikes,
     };
   }
 
   if (featureId === 'detectUnfollowers') {
     return {
-      username: overrideConfig.username ?? operationConfig.username,
-      maxUsers: overrideConfig.maxUsers ?? operationConfig.maxUsers,
+      username: config.username,
+      maxUsers: config.maxUsers,
     };
   }
 
   return config;
 }
 
-async function queueConsoleOperations({ user, feature, payload, accountIds, mode, retryOf = null }) {
+async function queueConsoleOperations({ user, feature, payload, accountIds, mode, retryOf = null, retryConfig = null }) {
   const batchId = accountIds.length > 1 || retryOf ? randomUUID() : null;
   let parentOperation = null;
+  const encryptedRetryConfig = retryConfig ? buildEncryptedRetryConfig(retryConfig) : {};
 
   if (batchId) {
     parentOperation = await prisma.operation.create({
@@ -117,6 +122,7 @@ async function queueConsoleOperations({ user, feature, payload, accountIds, mode
           isBatch: true,
           retryOf,
           mode,
+          ...encryptedRetryConfig,
           accountIds: accountIds.filter(Boolean),
           childCount: accountIds.length,
         }),
@@ -310,6 +316,7 @@ router.post('/actions/execute', async (req, res) => {
       payload,
       accountIds,
       mode,
+      retryConfig: config,
     });
 
     res.json({
@@ -368,6 +375,7 @@ router.post('/actions/retry-failed', async (req, res) => {
       accountIds: [...new Set(failedAccounts)],
       mode,
       retryOf: parent.id,
+      retryConfig,
     });
 
     res.json({

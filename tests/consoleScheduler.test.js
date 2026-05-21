@@ -3,7 +3,12 @@ import { getFeatureById, getPublicFeatureCatalog } from '../api/config/features.
 import { shouldSerializeAccountJob } from '../api/services/accountExecutionLock.js';
 import { explicitAccountIdsFromBody } from '../api/services/accountSelection.js';
 import { isSessionExpiredError } from '../api/services/accountStore.js';
-import { createActionPayload } from '../api/services/consoleActions.js';
+import { createActionPayload, sanitizeConfig } from '../api/services/consoleActions.js';
+import {
+  buildEncryptedRetryConfig,
+  decryptRetryConfig,
+  recoverRetryConfig,
+} from '../api/services/consoleRetryConfig.js';
 import { summarizeChildStatuses } from '../api/services/operationBatches.js';
 import {
   getJobRetryState,
@@ -60,6 +65,16 @@ describe('console scheduler helpers', () => {
     });
   });
 
+  it('marks every catalog feature as available for the unified console', () => {
+    const catalog = getPublicFeatureCatalog();
+    const unavailable = catalog.features.filter((item) => item.status !== 'available');
+    const missingAction = catalog.features.filter((item) => item.id !== 'accounts' && !item.consoleAction);
+
+    expect(unavailable).toEqual([]);
+    expect(missingAction).toEqual([]);
+    expect(catalog.categories.every((category) => category.available === category.total)).toBe(true);
+  });
+
   it('summarizes multi-account child operations for parent history', () => {
     const summary = summarizeChildStatuses([
       { status: 'completed' },
@@ -104,6 +119,30 @@ describe('console scheduler helpers', () => {
     expect(explicitAccountIdsFromBody({ accountId: 'acc_1' })).toEqual(['acc_1']);
     expect(explicitAccountIdsFromBody({ accountIds: ['acc_1', 'acc_1', ' acc_2 '] })).toEqual(['acc_1', 'acc_2']);
     expect(explicitAccountIdsFromBody({})).toEqual([]);
+  });
+
+  it('stores batch retry inputs encrypted and hides them from history output', () => {
+    const retryConfig = {
+      message: 'secret dm body',
+      text: 'secret post body',
+      tweets: 'first\n---\nsecond',
+    };
+    const stored = buildEncryptedRetryConfig(retryConfig);
+
+    expect(stored.hasRetryConfig).toBe(true);
+    expect(stored.encryptedRetryConfig).toBeTruthy();
+    expect(stored.encryptedRetryConfig).not.toContain('secret');
+    expect(decryptRetryConfig(stored)).toEqual(retryConfig);
+    expect(recoverRetryConfig({ ...stored, textPreview: 'secret' }, { text: 'override text' })).toMatchObject({
+      message: 'secret dm body',
+      text: 'override text',
+      tweets: 'first\n---\nsecond',
+      textPreview: 'secret',
+    });
+    expect(sanitizeConfig(stored)).toMatchObject({
+      encryptedRetryConfig: '[hidden]',
+      hasRetryConfig: true,
+    });
   });
 
   it('connects follower cleanup actions to the console catalog', () => {

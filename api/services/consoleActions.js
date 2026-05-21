@@ -1,4 +1,17 @@
-const hiddenConfigKeys = new Set(['message', 'dmMessage', 'comment', 'comments', 'text', 'tweets', 'question', 'options', 'sessionCookie', 'cookie', 'token']);
+const hiddenConfigKeys = new Set([
+  'comment',
+  'comments',
+  'cookie',
+  'dmMessage',
+  'encryptedRetryConfig',
+  'message',
+  'options',
+  'question',
+  'sessionCookie',
+  'text',
+  'token',
+  'tweets',
+]);
 
 function normalizeUsername(username = '') {
   return String(username).trim().replace(/^@/, '').replace(/[^a-zA-Z0-9_]/g, '');
