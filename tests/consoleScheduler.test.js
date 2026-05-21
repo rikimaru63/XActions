@@ -59,6 +59,7 @@ describe('console scheduler helpers', () => {
     expect(html).toContain('detailOpen: false');
     expect(html).toContain("els.detail.classList.toggle('open', state.detailOpen)");
     expect(html).toContain("els.detailToggle?.addEventListener('click'");
+    expect(html).toContain('inset: auto 0 64px 0;');
     expect(html).toContain('state.detailOpen = true;');
   });
 
