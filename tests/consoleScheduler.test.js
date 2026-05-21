@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'fs';
-import { getFeatureById, getPublicFeatureCatalog } from '../api/config/features.js';
+import { features, getFeatureById, getPublicFeatureCatalog } from '../api/config/features.js';
 import { shouldSerializeAccountJob } from '../api/services/accountExecutionLock.js';
 import {
   assertAccountSelectionLimit,
@@ -115,6 +115,19 @@ describe('console scheduler helpers', () => {
     expect(missingAction).toEqual([]);
     expect(missingSchedule).toEqual([]);
     expect(catalog.categories.every((category) => category.available === category.total)).toBe(true);
+  });
+
+  it('connects every console queue type to a worker processor', () => {
+    const workerSource = readFileSync(new URL('../api/services/jobQueue.js', import.meta.url), 'utf8');
+    const processors = new Set(
+      [...workerSource.matchAll(/operationsQueue\.process\(['"]([^'"]+)['"]/g)]
+        .map((match) => match[1])
+    );
+    const requiredTypes = [...new Set(features
+      .filter((feature) => feature.id !== 'accounts' && feature.consoleAction)
+      .map((feature) => feature.queueType || feature.operationType))];
+
+    expect(requiredTypes.filter((type) => !processors.has(type))).toEqual([]);
   });
 
   it('summarizes multi-account child operations for parent history', () => {
