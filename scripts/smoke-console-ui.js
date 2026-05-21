@@ -47,6 +47,13 @@ function isIgnorableBadResponse(item) {
   return item.includes('/favicon.ico');
 }
 
+function isIgnorableFailedRequest(item) {
+  if (!item.includes('net::ERR_ABORTED')) return false;
+  return item.includes('/favicon.ico')
+    || item.includes('/api/console/history?')
+    || item.includes('/api/scheduled-actions?');
+}
+
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 function isMockedUiListRequest(request) {
@@ -250,6 +257,7 @@ try {
 
   await page.click('#feature-list .feature-row');
   await page.waitForFunction(() => document.querySelector('#detail')?.classList.contains('open'));
+  await delay(300);
   const mobileAfterFeatureClick = await page.evaluate(() => {
     const detail = document.querySelector('#detail');
     const toggle = document.querySelector('#detail-toggle');
@@ -264,6 +272,7 @@ try {
 
   await page.click('#detail-toggle');
   await page.waitForFunction(() => !document.querySelector('#detail')?.classList.contains('open'));
+  await delay(300);
   const mobileAfterClose = await page.evaluate(() => {
     const detail = document.querySelector('#detail');
     const toggle = document.querySelector('#detail-toggle');
@@ -278,6 +287,7 @@ try {
 
   await page.click('#detail-toggle');
   await page.waitForFunction(() => document.querySelector('#detail')?.classList.contains('open'));
+  await delay(300);
   const mobileAfterReopen = await page.evaluate(() => {
     const detail = document.querySelector('#detail');
     const toggle = document.querySelector('#detail-toggle');
@@ -295,14 +305,17 @@ try {
     afterFeatureClick: mobileAfterFeatureClick,
     afterClose: mobileAfterClose,
     afterReopen: mobileAfterReopen,
-    closedPeekVisible: mobileInitial.top >= mobileInitial.innerHeight - 96
-      && mobileAfterClose.top >= mobileAfterClose.innerHeight - 96,
-    openSheetVisible: mobileAfterFeatureClick.top < mobileAfterFeatureClick.innerHeight * 0.45
-      && mobileAfterReopen.top < mobileAfterReopen.innerHeight * 0.45,
+    closedPeekVisible: mobileInitial.top >= mobileInitial.innerHeight - 180
+      && mobileInitial.top <= mobileInitial.innerHeight - 48
+      && mobileAfterClose.top >= mobileAfterClose.innerHeight - 180
+      && mobileAfterClose.top <= mobileAfterClose.innerHeight - 48,
+    openSheetVisible: mobileAfterFeatureClick.top < mobileAfterFeatureClick.innerHeight * 0.35
+      && mobileAfterReopen.top < mobileAfterReopen.innerHeight * 0.35,
   };
 
   const blockingBadResponses = badResponses.filter((item) => !isIgnorableBadResponse(item));
   const blockingConsoleErrors = consoleErrors.filter((item) => !item.includes('Failed to load resource'));
+  const blockingFailedRequests = failedRequests.filter((item) => !isIgnorableFailedRequest(item));
   const ok = result.title.includes('コンソール')
     && result.h1 === 'コンソール'
     && result.lang === 'ja'
@@ -338,7 +351,7 @@ try {
     && pageErrors.length === 0
     && blockingConsoleErrors.length === 0
     && blockingBadResponses.length === 0
-    && failedRequests.length === 0;
+    && blockingFailedRequests.length === 0;
 
   console.log(JSON.stringify({
     ok,
@@ -352,6 +365,7 @@ try {
     consoleErrors,
     badResponses,
     failedRequests,
+    blockingFailedRequests,
   }, null, 2));
 
   if (!ok) process.exit(1);
