@@ -867,6 +867,7 @@
       mode: 'dryRun',
       query: '',
       selectedAccountIds: [],
+      accountReadiness: null,
       detailOpen: false,
     };
 
@@ -1031,6 +1032,8 @@
     }
 
     function liveReadiness() {
+      if (state.accountReadiness) return state.accountReadiness;
+
       const activeCount = activeAccounts().length;
       const remaining = Math.max(MAX_ACCOUNT_SELECTION - activeCount, 0);
       const ready = remaining === 0;
@@ -1923,6 +1926,7 @@
     async function loadAccounts() {
       const accountData = await apiRequest('/console/accounts');
       state.accounts = accountData.accounts || [];
+      state.accountReadiness = accountData.liveReadiness || null;
       syncSelectedAccounts();
     }
 

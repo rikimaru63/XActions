@@ -14,7 +14,7 @@ import {
   parseJson,
   sanitizeOperation,
 } from '../services/consoleActions.js';
-import { listAccountsForUser } from '../services/accountStore.js';
+import { buildAccountLiveReadiness, listAccountsForUser } from '../services/accountStore.js';
 import {
   assertAccountSelectionLimit,
   explicitAccountIdsFromBody,
@@ -180,9 +180,11 @@ router.get('/features', (_req, res) => {
 
 router.get('/accounts', async (req, res) => {
   const accounts = await listAccountsForUser(req.user);
+  const liveReadiness = buildAccountLiveReadiness(accounts);
 
   res.json({
     accounts,
+    liveReadiness,
     compatibilityMode: false,
     defaultAccountId: accounts[0]?.id || null,
     needsConnection: !accounts.length,

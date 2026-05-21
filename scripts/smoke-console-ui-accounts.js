@@ -53,6 +53,26 @@ async function resolveToken(user) {
   return body.token;
 }
 
+async function fetchJson(path, authToken) {
+  const response = await fetch(`${baseUrl}${path}`, {
+    headers: { authorization: `Bearer ${authToken}` },
+  });
+  const body = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(body.error || `${path} failed with HTTP ${response.status}`);
+  return body;
+}
+
+async function readAccountReadiness(authToken) {
+  const [consoleAccounts, accountsRoute] = await Promise.all([
+    fetchJson('/api/console/accounts', authToken),
+    fetchJson('/api/accounts', authToken),
+  ]);
+  return {
+    console: consoleAccounts.liveReadiness,
+    accounts: accountsRoute.liveReadiness,
+  };
+}
+
 async function cleanupSmokeAccounts(userId) {
   const accounts = await prisma.xAccount.findMany({
     where: {
@@ -148,6 +168,7 @@ const user = await resolveSmokeUser();
 await cleanupSmokeAccounts(user.id);
 const accounts = await createUiAccounts(user.id);
 const authToken = await resolveToken(user);
+const apiReadiness = await readAccountReadiness(authToken);
 const browser = await puppeteer.launch(puppeteerLaunchOptions({
   headless: 'new',
   args: ['--no-sandbox', '--disable-setuid-sandbox'],
@@ -335,6 +356,10 @@ try {
   const ok = Object.values(accountFormChecks).every(Boolean)
     && sidebar.accountName === `@${defaultAccount.username}`
     && sidebar.accountState === '3件 / 2件が実行可能'
+    && apiReadiness.console?.ready === true
+    && apiReadiness.console?.activeAccounts === 2
+    && apiReadiness.accounts?.ready === true
+    && apiReadiness.accounts?.activeAccounts === 2
     && sidebar.readiness?.includes('複数アカウント実行の準備完了')
     && sidebar.readiness?.includes('2件を選択してlive確認できます')
     && defaultSidebar
@@ -367,6 +392,7 @@ try {
     accountForm,
     accountCreateRequests,
     accountFormChecks,
+    apiReadiness,
     sidebar,
     management,
     expiredAccountGuidance,

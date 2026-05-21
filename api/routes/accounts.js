@@ -3,6 +3,7 @@ import { PrismaClient } from '@prisma/client';
 import { authMiddleware } from '../middleware/auth.js';
 import {
   accountPauseMessage,
+  buildAccountLiveReadiness,
   listAccountsForUser,
   pauseActiveSchedulesForAccount,
   sanitizeAccount,
@@ -23,6 +24,7 @@ router.get('/', async (req, res) => {
     const accounts = await listAccountsForUser(req.user);
     res.json({
       accounts,
+      liveReadiness: buildAccountLiveReadiness(accounts),
       defaultAccountId: accounts.find((account) => account.isDefault)?.id || null,
     });
   } catch (error) {

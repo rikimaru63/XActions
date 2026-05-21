@@ -11,6 +11,7 @@ import {
 } from '../api/services/accountSelection.js';
 import {
   accountPauseMessage,
+  buildAccountLiveReadiness,
   isSessionExpiredError,
   shouldPauseSchedulesForAccountStatus,
 } from '../api/services/accountStore.js';
@@ -102,10 +103,35 @@ describe('console scheduler helpers', () => {
     const html = readFileSync(new URL('../dashboard/console.html', import.meta.url), 'utf8');
 
     expect(html).toContain('function liveReadiness()');
+    expect(html).toContain('state.accountReadiness');
+    expect(html).toContain('accountData.liveReadiness');
     expect(html).toContain('data-live-readiness');
     expect(html).toContain('複数アカウント実行の準備完了');
     expect(html).toContain('live検証には2件必要です');
     expect(html).toContain('2件のX連携で実行または予約できます');
+  });
+
+  it('builds server-side live readiness without exposing secrets', () => {
+    const readiness = buildAccountLiveReadiness([
+      { id: 'acc_1', username: 'a', status: 'active', lastVerifiedAt: new Date('2026-05-21T00:00:00Z') },
+      { id: 'acc_2', username: 'b', status: 'active', lastVerifiedAt: null },
+      { id: 'acc_3', username: 'c', status: 'expired', encryptedCookie: 'secret' },
+    ]);
+
+    expect(readiness).toMatchObject({
+      ready: true,
+      requiredAccounts: 2,
+      totalAccounts: 3,
+      activeAccounts: 2,
+      verifiedActiveAccounts: 1,
+      remainingAccounts: 0,
+    });
+    expect(JSON.stringify(readiness)).not.toContain('secret');
+
+    const pending = buildAccountLiveReadiness([{ id: 'acc_1', status: 'active' }]);
+    expect(pending.ready).toBe(false);
+    expect(pending.remainingAccounts).toBe(1);
+    expect(pending.nextAction).toContain('X連携を追加');
   });
 
   it('parses live readonly account selectors consistently', () => {

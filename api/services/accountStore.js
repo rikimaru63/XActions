@@ -4,6 +4,7 @@ import { decrypt, encrypt } from './sessionCrypto.js';
 
 const prisma = new PrismaClient();
 const pauseScheduleStatuses = new Set(['expired', 'error', 'disabled']);
+const liveReadinessAccountTarget = 2;
 
 function normalizeUsername(username = '') {
   return String(username).trim().replace(/^@/, '').replace(/[^a-zA-Z0-9_]/g, '');
@@ -26,6 +27,30 @@ function sanitizeAccount(account) {
     compatibilityMode: !!account.compatibilityMode,
     createdAt: account.createdAt,
     updatedAt: account.updatedAt,
+  };
+}
+
+function buildAccountLiveReadiness(accounts = [], target = liveReadinessAccountTarget) {
+  const activeAccounts = accounts.filter((account) => account.status === 'active');
+  const activeCount = activeAccounts.length;
+  const remaining = Math.max(target - activeCount, 0);
+  const ready = remaining === 0;
+
+  return {
+    ready,
+    requiredAccounts: target,
+    totalAccounts: accounts.length,
+    activeAccounts: activeCount,
+    verifiedActiveAccounts: activeAccounts.filter((account) => account.lastVerifiedAt).length,
+    remainingAccounts: remaining,
+    title: ready ? '複数アカウント実行の準備完了' : `あと${remaining}件のX連携が必要`,
+    detail: ready
+      ? `実行可能なX連携が${activeCount}件あります。2件を選択してlive確認できます。`
+      : `実行可能なX連携は${activeCount}件です。live検証には2件必要です。`,
+    nextAction: ready
+      ? '機能を選び、2件のX連携で実行または予約できます。'
+      : 'X連携を追加し、確認で連携済みにしてください。',
+    reasons: ready ? [] : ['実行可能なX連携が2件必要です。'],
   };
 }
 
@@ -300,6 +325,7 @@ async function setDefaultAccount(userId, accountId) {
 export {
   ensureDefaultAccountForUser,
   accountPauseMessage,
+  buildAccountLiveReadiness,
   getAccountForUser,
   getDecryptedAccountCookie,
   isSessionExpiredError,
