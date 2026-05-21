@@ -836,8 +836,11 @@ operationsQueue.process('sendDM', 1, async (job) => {
 operationsQueue.on('active', async (job) => {
   if (!job.data.operationId) return;
 
-  await prisma.operation.update({
-    where: { id: job.data.operationId },
+  await prisma.operation.updateMany({
+    where: {
+      id: job.data.operationId,
+      status: { notIn: ['completed', 'failed', 'cancelled'] },
+    },
     data: {
       status: 'processing',
       startedAt: new Date()
@@ -847,8 +850,11 @@ operationsQueue.on('active', async (job) => {
   });
 
   if (job.data.scheduledActionRunId) {
-    await prisma.scheduledActionRun.update({
-      where: { id: job.data.scheduledActionRunId },
+    await prisma.scheduledActionRun.updateMany({
+      where: {
+        id: job.data.scheduledActionRunId,
+        status: { notIn: ['completed', 'failed', 'skipped'] },
+      },
       data: {
         status: 'running',
         startedAt: new Date(),
