@@ -246,6 +246,18 @@ const sensitiveProbeValues = [
   sensitiveProbeUser.twitterRefreshToken,
 ];
 
+const localeAuditFiles = [
+  '../dashboard/console.html',
+  '../api/routes/console.js',
+  '../api/routes/accounts.js',
+  '../api/routes/scheduled-actions.js',
+  '../api/services/accountStore.js',
+  '../api/services/scheduledActions.js',
+  '../api/services/scheduleUtils.js',
+];
+
+const mojibakePattern = /�|縺|繧|繝|螳|莠|譛|騾|隕|謚|蜑|蠕|蛛|螟|髢|讖|蛻|遒|蜿|菴|谺|蝗|蜀|豁ｴ|霑|逕|||Ａ|\?{6,}/;
+
 function assert(condition, message) {
   if (!condition) throw new Error(message);
 }
@@ -451,14 +463,39 @@ function auditUi() {
   };
 }
 
+function auditLocaleQuality() {
+  const hits = [];
+
+  for (const file of localeAuditFiles) {
+    const source = readFileSync(new URL(file, import.meta.url), 'utf8');
+    source.split(/\r?\n/).forEach((line, index) => {
+      if (mojibakePattern.test(line)) {
+        hits.push({
+          file: file.replace(/^\.\.\//, ''),
+          line: index + 1,
+          sample: line.trim().slice(0, 160),
+        });
+      }
+    });
+  }
+
+  return {
+    ok: hits.length === 0,
+    files: localeAuditFiles.length,
+    hits,
+  };
+}
+
 const catalog = auditCatalog();
 const schedules = auditSchedules();
 const ui = auditUi();
+const locale = auditLocaleQuality();
 const result = {
-  ok: catalog.ok && ui.ok,
+  ok: catalog.ok && ui.ok && locale.ok,
   catalog,
   schedules,
   ui,
+  locale,
 };
 
 console.log(JSON.stringify(result, null, 2));

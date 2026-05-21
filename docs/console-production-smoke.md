@@ -11,6 +11,7 @@ This smoke checks the production items from `docs/console-scheduler-multiaccount
 - `/api/scheduled-actions`
 - hidden account/session secrets in authenticated account and schedule responses
 - feature catalog audit, including console payload checks that keep account/session secrets out of jobs
+- console locale audit that blocks mojibake in the main console and related account/schedule APIs
 - scheduler smoke coverage for expired account visibility, execution rejection,
   schedule rejection, and no operation/schedule residue
 - automatic due schedule coverage proving the worker picks persisted once
