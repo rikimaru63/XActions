@@ -35,6 +35,8 @@ import { extractVideo } from './videoExtractor.js';
 import { getBookmarks } from '../../src/bookmarkManager.js';
 import { getTrends } from '../../src/discoveryExplore.js';
 import { exportConversation, getConversations } from '../../src/dmManager.js';
+import { bookmarkTweet, replyToTweet } from '../../src/engagementManager.js';
+import { deletePost } from '../../src/postComposer.js';
 import { getLiveSpaces, getScheduledSpaces, scrapeSpace } from '../../src/spacesManager.js';
 import { aggregateResults, analyzeBatch, analyzeSentiment, analyzeTweetPriceCorrelation } from '../../src/analytics/index.js';
 import { DatasetStore, listDatasets } from '../../src/scraping/paginationEngine.js';
@@ -1228,6 +1230,60 @@ operationsQueue.process('unlikeTweet', 2, async (job) => {
       const isAuthenticated = await browserAutomation.checkAuthentication(page);
       if (!isAuthenticated) throw new Error('Session expired - please reconnect your X account');
       return await browserAutomation.unlikePost(page, tweetUrlFromConfig(config));
+    } finally {
+      await page.close();
+    }
+  });
+});
+
+operationsQueue.process('replyToTweet', 1, async (job) => {
+  console.log(`🔄 Processing job ${job.id}: replyToTweet`);
+
+  return withAccountExecutionLock(operationsQueue.client, job, async () => {
+    const config = await resolveJobConfig(job);
+    const page = await browserAutomation.createPage(config.sessionCookie);
+
+    try {
+      await browserAutomation.navigateToTwitter(page);
+      const isAuthenticated = await browserAutomation.checkAuthentication(page);
+      if (!isAuthenticated) throw new Error('Session expired - please reconnect your X account');
+      return await replyToTweet(page, tweetUrlFromConfig(config), config.text);
+    } finally {
+      await page.close();
+    }
+  });
+});
+
+operationsQueue.process('bookmarkTweet', 2, async (job) => {
+  console.log(`🔄 Processing job ${job.id}: bookmarkTweet`);
+
+  return withAccountExecutionLock(operationsQueue.client, job, async () => {
+    const config = await resolveJobConfig(job);
+    const page = await browserAutomation.createPage(config.sessionCookie);
+
+    try {
+      await browserAutomation.navigateToTwitter(page);
+      const isAuthenticated = await browserAutomation.checkAuthentication(page);
+      if (!isAuthenticated) throw new Error('Session expired - please reconnect your X account');
+      return await bookmarkTweet(page, tweetUrlFromConfig(config));
+    } finally {
+      await page.close();
+    }
+  });
+});
+
+operationsQueue.process('deleteTweet', 1, async (job) => {
+  console.log(`🔄 Processing job ${job.id}: deleteTweet`);
+
+  return withAccountExecutionLock(operationsQueue.client, job, async () => {
+    const config = await resolveJobConfig(job);
+    const page = await browserAutomation.createPage(config.sessionCookie);
+
+    try {
+      await browserAutomation.navigateToTwitter(page);
+      const isAuthenticated = await browserAutomation.checkAuthentication(page);
+      if (!isAuthenticated) throw new Error('Session expired - please reconnect your X account');
+      return await deletePost(page, tweetUrlFromConfig(config));
     } finally {
       await page.close();
     }

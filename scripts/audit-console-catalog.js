@@ -22,6 +22,13 @@ const sampleConfigByFeature = {
   unlikeTweet: {
     tweetUrl: 'https://x.com/source/status/1234567890',
   },
+  replyToTweet: {
+    tweetUrl: 'https://x.com/source/status/1234567890',
+    text: 'secret-reply-body',
+  },
+  bookmarkTweet: {
+    tweetUrl: 'https://x.com/source/status/1234567890',
+  },
   autoLike: {
     query: 'xactions',
     maxLikes: 1,
@@ -67,6 +74,9 @@ const sampleConfigByFeature = {
   },
   schedulePost: {
     text: 'secret-scheduled-post-body',
+  },
+  deleteTweet: {
+    tweetUrl: 'https://x.com/source/status/1234567890',
   },
   conversations: {
     limit: 1,
@@ -140,6 +150,7 @@ const sampleConfigByFeature = {
 const hiddenStringsByFeature = {
   targetEngage: ['secret-dm-body'],
   sendDM: ['secret-dm-body'],
+  replyToTweet: ['secret-reply-body'],
   autoComment: ['secret-comment-body'],
   postTweet: ['secret-post-body'],
   postThread: ['secret-thread-post-one', 'secret-thread-post-two'],

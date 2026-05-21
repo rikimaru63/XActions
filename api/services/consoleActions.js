@@ -156,6 +156,57 @@ function createActionPayload(feature, inputConfig, mode = 'dryRun', user = {}) {
       };
     }
 
+    case 'replyToTweet': {
+      if (dryRun) {
+        throw new Error('この機能は確認のみには対応していません。実行を選んでください。');
+      }
+
+      const tweetUrl = String(config.tweetUrl || '').trim();
+      const tweetId = String(config.tweetId || '').trim() || tweetUrl.match(/status\/(\d+)/)?.[1];
+      const text = String(config.text || '').trim().slice(0, 1000);
+      if (!tweetUrl && !tweetId) throw new Error('投稿URLを入力してください。');
+      if (!text) throw new Error('返信文を入力してください。');
+
+      return {
+        operationType: 'replyToTweet',
+        operationConfig: {
+          sourceFeatureId: feature.id,
+          tweetUrl,
+          tweetId,
+          textLength: text.length,
+        },
+        jobConfig: {
+          tweetUrl,
+          tweetId,
+          text,
+        },
+      };
+    }
+
+    case 'bookmarkTweet':
+    case 'deleteTweet': {
+      if (dryRun) {
+        throw new Error('この機能は確認のみには対応していません。実行を選んでください。');
+      }
+
+      const tweetUrl = String(config.tweetUrl || '').trim();
+      const tweetId = String(config.tweetId || '').trim() || tweetUrl.match(/status\/(\d+)/)?.[1];
+      if (!tweetUrl && !tweetId) throw new Error('投稿URLを入力してください。');
+
+      return {
+        operationType: feature.operationType,
+        operationConfig: {
+          sourceFeatureId: feature.id,
+          tweetUrl,
+          tweetId,
+        },
+        jobConfig: {
+          tweetUrl,
+          tweetId,
+        },
+      };
+    }
+
     case 'autoLike': {
       const query = String(config.query || '').trim();
       const targetUsername = normalizeUsername(config.targetUsername);

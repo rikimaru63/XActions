@@ -690,6 +690,63 @@ describe('console scheduler helpers', () => {
     expect(poll.jobConfig.options).toEqual(['A', 'B']);
   });
 
+  it('connects reply, bookmark, and delete actions for live console execution', () => {
+    for (const id of ['replyToTweet', 'bookmarkTweet', 'deleteTweet']) {
+      expect(getFeatureById(id)).toMatchObject({
+        status: 'available',
+        consoleAction: id,
+        accountRequired: true,
+        supportsDryRun: false,
+        supportsSchedule: true,
+      });
+      expect(() => createActionPayload(
+        getFeatureById(id),
+        {
+          tweetUrl: 'https://x.com/source/status/1234567890',
+          text: '返信本文',
+        },
+        'dryRun'
+      )).toThrow('確認のみ');
+    }
+
+    const reply = createActionPayload(
+      getFeatureById('replyToTweet'),
+      { tweetUrl: 'https://x.com/source/status/1234567890', text: '返信本文' },
+      'live'
+    );
+    expect(reply).toMatchObject({
+      operationType: 'replyToTweet',
+      operationConfig: {
+        sourceFeatureId: 'replyToTweet',
+        tweetUrl: 'https://x.com/source/status/1234567890',
+        tweetId: '1234567890',
+        textLength: '返信本文'.length,
+      },
+      jobConfig: {
+        tweetUrl: 'https://x.com/source/status/1234567890',
+        tweetId: '1234567890',
+        text: '返信本文',
+      },
+    });
+    expect(reply.operationConfig.text).toBeUndefined();
+
+    const bookmark = createActionPayload(
+      getFeatureById('bookmarkTweet'),
+      { tweetUrl: 'https://x.com/source/status/1234567890' },
+      'live'
+    );
+    expect(bookmark.operationType).toBe('bookmarkTweet');
+    expect(bookmark.jobConfig.tweetId).toBe('1234567890');
+
+    const deletion = createActionPayload(
+      getFeatureById('deleteTweet'),
+      { tweetUrl: 'https://x.com/source/status/1234567890' },
+      'live'
+    );
+    expect(deletion.operationType).toBe('deleteTweet');
+    expect(deletion.jobConfig.tweetId).toBe('1234567890');
+  });
+
   it('connects utility collection actions without requiring an X account', () => {
     expect(getFeatureById('video')).toMatchObject({
       status: 'available',
