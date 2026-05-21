@@ -268,6 +268,8 @@ const sensitiveProbeValues = [
 ];
 
 const localeAuditFiles = [
+  '../docs/console-scheduler-multiaccount-spec.md',
+  '../docs/console-live-smoke.md',
   '../dashboard/console.html',
   '../api/routes/console.js',
   '../api/routes/accounts.js',
@@ -275,6 +277,11 @@ const localeAuditFiles = [
   '../api/services/accountStore.js',
   '../api/services/scheduledActions.js',
   '../api/services/scheduleUtils.js',
+  '../scripts/lib/consoleLiveReadiness.js',
+  '../scripts/register-console-live-accounts.js',
+  '../scripts/register-console-live-accounts-host.sh',
+  '../scripts/run-console-live-readonly-host.sh',
+  '../scripts/smoke-console-live-readonly.js',
   '../scripts/smoke-console-ui.js',
   '../scripts/smoke-console-ui-accounts.js',
 ];
