@@ -648,6 +648,97 @@ async function exerciseStaleLockRecovery(token, accountId) {
   };
 }
 
+async function exerciseRecurringDueScheduler(token, accountId) {
+  const initialRunAt = new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString();
+  const createResponse = await requestJson('/api/console/actions/schedule', {
+    method: 'POST',
+    token,
+    body: {
+      featureId: 'postTweet',
+      mode: 'dryRun',
+      name: `Console recurring interval smoke ${smokeId}`,
+      accountIds: [accountId],
+      maxRetries: 0,
+      config: {
+        text: `[${smokeId}] recurring interval dry run`,
+      },
+      schedule: {
+        type: 'interval',
+        runAt: initialRunAt,
+        intervalMinutes: 60,
+        timezone: 'Asia/Tokyo',
+      },
+    },
+  });
+
+  const schedule = createResponse.schedules?.[0];
+  assert(schedule?.id, 'Recurring interval smoke did not create a schedule.');
+  assert(schedule.accountId === accountId, 'Recurring interval smoke created the schedule for the wrong account.');
+  assert(schedule.scheduleType === 'interval', 'Recurring interval smoke did not create an interval schedule.');
+  pushUnique(created.scheduleIds, [schedule.id]);
+
+  const dueAt = new Date(Date.now() - 60 * 1000);
+  await prisma.scheduledAction.update({
+    where: { id: schedule.id },
+    data: {
+      nextRunAt: dueAt,
+      lockedAt: null,
+      lockedBy: null,
+    },
+  });
+
+  const result = await waitFor('recurring interval due scheduler completion', async () => {
+    const row = await prisma.scheduledAction.findUnique({
+      where: { id: schedule.id },
+      include: {
+        runs: {
+          include: {
+            operation: {
+              select: {
+                id: true,
+                accountId: true,
+                status: true,
+                error: true,
+              },
+            },
+          },
+          orderBy: { createdAt: 'asc' },
+        },
+      },
+    });
+
+    const run = row?.runs?.[0] || null;
+    const nextRunAt = row?.nextRunAt ? new Date(row.nextRunAt) : null;
+    const terminal = row?.status === 'active'
+      && nextRunAt
+      && nextRunAt.getTime() > Date.now()
+      && row?.lastRunAt
+      && row?.lockedAt === null
+      && row?.lockedBy === null
+      && run?.status === 'completed'
+      && run?.operation?.status === 'completed';
+
+    return { ok: terminal, schedule: row, run };
+  }, { timeoutMs: 90000, intervalMs: 1500 });
+
+  if (result.run?.id) pushUnique(created.runIds, [result.run.id]);
+  if (result.run?.operationId) pushUnique(created.operationIds, [result.run.operationId]);
+
+  return {
+    scheduleId: schedule.id,
+    accountId,
+    type: result.schedule.scheduleType,
+    status: result.schedule.status,
+    lastRunAt: result.schedule.lastRunAt,
+    nextRunAt: result.schedule.nextRunAt,
+    nextRunInFuture: new Date(result.schedule.nextRunAt).getTime() > Date.now(),
+    lockCleared: result.schedule.lockedAt === null && result.schedule.lockedBy === null,
+    runId: result.run.id,
+    operationId: result.run.operationId,
+    operationStatus: result.run.operation?.status,
+  };
+}
+
 async function exerciseScheduleManagementApi(token, accountId) {
   const initialRunAt = new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString();
   const createResponse = await requestJson('/api/console/actions/schedule', {
@@ -880,6 +971,7 @@ async function main() {
 
   const automaticDue = await exerciseAutomaticDueScheduler(token, accountIds);
   const staleLockRecovery = await exerciseStaleLockRecovery(token, accountIds[0]);
+  const recurringDue = await exerciseRecurringDueScheduler(token, accountIds[0]);
 
   const runAt = new Date(Date.now() + 60 * 60 * 1000).toISOString();
   const scheduleResponse = await requestJson('/api/console/actions/schedule', {
@@ -969,6 +1061,10 @@ async function main() {
     historyIds.has(staleLockRecovery.operationId),
     'Stale lock recovery operation was not visible in filtered history.'
   );
+  assert(
+    historyIds.has(recurringDue.operationId),
+    'Recurring due scheduler operation was not visible in filtered history.'
+  );
   const accountDeletes = await exerciseAccountDeleteApi(token, accounts);
   const deletedAccountSchedules = await assertDeletedAccountSchedulesPaused(manualScheduleIds);
 
@@ -994,6 +1090,7 @@ async function main() {
     },
     automaticDue,
     staleLockRecovery,
+    recurringDue,
     scheduleManagement,
     schedules: schedules.map((schedule) => ({
       id: schedule.id,
