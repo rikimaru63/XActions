@@ -645,7 +645,8 @@ describe('console scheduler helpers', () => {
       'dryRun'
     );
     expect(tweet.operationType).toBe('postTweet');
-    expect(tweet.operationConfig.textPreview).toBeTruthy();
+    expect(tweet.operationConfig.textLength).toBeGreaterThan(0);
+    expect(tweet.operationConfig.textPreview).toBeUndefined();
     expect(tweet.operationConfig.text).toBeUndefined();
     expect(tweet.operationConfig.hasReplyTo).toBe(true);
     expect(tweet.jobConfig.text).toContain('公開本文');
@@ -669,6 +670,7 @@ describe('console scheduler helpers', () => {
       tweetCount: 2,
       dryRun: true,
     });
+    expect(thread.operationConfig.previews).toBeUndefined();
     expect(thread.operationConfig.tweets).toBeUndefined();
     expect(thread.jobConfig.tweets).toEqual(['1つ目', '2つ目']);
 
@@ -678,11 +680,12 @@ describe('console scheduler helpers', () => {
       'dryRun'
     );
     expect(poll.operationConfig).toMatchObject({
-      questionPreview: 'どちらですか？',
+      questionLength: 'どちらですか？'.length,
       optionCount: 2,
       durationMinutes: 60,
       dryRun: true,
     });
+    expect(poll.operationConfig.questionPreview).toBeUndefined();
     expect(poll.operationConfig.options).toBeUndefined();
     expect(poll.jobConfig.options).toEqual(['A', 'B']);
   });
@@ -792,7 +795,7 @@ describe('console scheduler helpers', () => {
     expect(run.operation.config).toMatchObject({
       sourceFeatureId: 'postTweet',
       text: '[hidden]',
-      textPreview: 'public preview',
+      textPreview: '[hidden]',
       sessionCookie: '[hidden]',
     });
   });

@@ -6,9 +6,12 @@ const hiddenConfigKeys = new Set([
   'encryptedRetryConfig',
   'message',
   'options',
+  'previews',
   'question',
+  'questionPreview',
   'sessionCookie',
   'text',
+  'textPreview',
   'token',
   'tweets',
 ]);
@@ -726,7 +729,6 @@ function createActionPayload(feature, inputConfig, mode = 'dryRun', user = {}) {
         operationType: 'postTweet',
         operationConfig: {
           sourceFeatureId: feature.id,
-          textPreview: text.slice(0, 120),
           textLength: text.length,
           hasReplyTo: !!replyTo,
           dryRun,
@@ -754,7 +756,6 @@ function createActionPayload(feature, inputConfig, mode = 'dryRun', user = {}) {
         operationConfig: {
           sourceFeatureId: feature.id,
           tweetCount: cleaned.length,
-          previews: cleaned.map((item) => item.slice(0, 80)),
           dryRun,
         },
         jobConfig: {
@@ -781,7 +782,7 @@ function createActionPayload(feature, inputConfig, mode = 'dryRun', user = {}) {
         operationType: 'createPoll',
         operationConfig: {
           sourceFeatureId: feature.id,
-          questionPreview: question.slice(0, 120),
+          questionLength: question.length,
           optionCount: cleanedOptions.length,
           durationMinutes,
           dryRun,
