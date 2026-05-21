@@ -34,6 +34,7 @@ function item(id, description, passed, evidence, missing = []) {
 
 function auditStaticAcceptance() {
   const dashboard = read('dashboard/console.html');
+  const server = read('api/server.js');
   const consoleRoute = read('api/routes/console.js');
   const accountsRoute = read('api/routes/accounts.js');
   const messagesRoute = read('api/routes/messages.js');
@@ -88,6 +89,14 @@ function auditStaticAcceptance() {
     'data-tab="settings"',
     'data-tab="schedule"',
     'data-tab="history"',
+  ]);
+
+  const dashboardRouteMissing = hasAll(server + dashboard, [
+    "app.get('/dashboard'",
+    "res.redirect(302, '/console')",
+    "app.get('/classic-dashboard'",
+    'dashboard/index.html',
+    'href="/classic-dashboard"',
   ]);
 
   const accountCrudMissing = hasAll(accountsRoute, [
@@ -193,6 +202,8 @@ function auditStaticAcceptance() {
   const productionMissing = hasAll(productionSmoke + JSON.stringify(pkg.scripts || {}), [
     '/api/health',
     '/console',
+    '/dashboard',
+    '/classic-dashboard',
     'audit:console-acceptance',
     'audit:console-catalog',
     'verify:headless',
@@ -238,6 +249,13 @@ function auditStaticAcceptance() {
       detailMissing.length === 0 && uiSmoke.includes('tabStates') && uiSmoke.includes('visitedFeatureTotal'),
       { script: 'smoke:console-ui' },
       detailMissing
+    ),
+    item(
+      'dashboard-entrypoint',
+      '/dashboard opens the Japanese console while the previous dashboard remains available as /classic-dashboard.',
+      dashboardRouteMissing.length === 0,
+      { route: '/dashboard', fallback: '/classic-dashboard' },
+      dashboardRouteMissing
     ),
     item(
       'multi-account-crud',

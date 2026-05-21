@@ -130,6 +130,30 @@ if ! grep -q '<html' /tmp/xactions-console-smoke.html; then
 fi
 echo "ok /console"
 
+dashboard_headers="$(curl -fsSI "${BASE_URL}/dashboard")"
+if ! printf '%s\n' "$dashboard_headers" | grep -Eq '^HTTP/[0-9.]+ 30[1278]'; then
+  echo "/dashboard did not redirect to /console" >&2
+  printf '%s\n' "$dashboard_headers" >&2
+  exit 1
+fi
+if ! printf '%s\n' "$dashboard_headers" | grep -Eiq '^location: /console'; then
+  echo "/dashboard redirect target was not /console" >&2
+  printf '%s\n' "$dashboard_headers" >&2
+  exit 1
+fi
+echo "ok /dashboard -> /console"
+
+classic_status="$(curl -fsS -o /tmp/xactions-classic-dashboard-smoke.html -w '%{http_code}' "${BASE_URL}/classic-dashboard")"
+if [[ "$classic_status" != "200" ]]; then
+  echo "/classic-dashboard returned HTTP ${classic_status}" >&2
+  exit 1
+fi
+if ! grep -q '<html' /tmp/xactions-classic-dashboard-smoke.html; then
+  echo "/classic-dashboard did not return HTML" >&2
+  exit 1
+fi
+echo "ok /classic-dashboard"
+
 docker exec -i \
   -e XACTIONS_BASE_URL="$BASE_URL" \
   -e XACTIONS_SMOKE_USERNAME="$SMOKE_USERNAME" \

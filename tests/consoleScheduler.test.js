@@ -85,6 +85,18 @@ describe('console scheduler helpers', () => {
     expect(html).not.toContain('window.confirm');
   });
 
+  it('makes the new console the default dashboard without deleting the old dashboard', () => {
+    const server = readFileSync(new URL('../api/server.js', import.meta.url), 'utf8');
+    const html = readFileSync(new URL('../dashboard/console.html', import.meta.url), 'utf8');
+
+    expect(server).toContain("app.get('/dashboard'");
+    expect(server).toContain("res.redirect(302, '/console')");
+    expect(server).toContain("app.get('/classic-dashboard'");
+    expect(server).toContain("dashboard/index.html");
+    expect(html).toContain('href="/classic-dashboard"');
+    expect(html).not.toContain('href="/dashboard"');
+  });
+
   it('parses live readonly account selectors consistently', () => {
     const env = {
       XACTIONS_LIVE_ACCOUNT_IDS: 'acc_1, acc_2, acc_1',

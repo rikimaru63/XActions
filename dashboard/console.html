@@ -753,7 +753,7 @@
     <aside class="rail">
       <div class="brand">
         <span>XActions</span>
-        <a class="link-btn" href="/dashboard">戻る</a>
+        <a class="link-btn" href="/classic-dashboard">旧ホーム</a>
       </div>
       <div class="account" id="account-box">
         <div class="account-label">Xアカウント</div>
@@ -762,7 +762,7 @@
         <div class="account-list" id="account-list"></div>
         <div class="account-tools">
           <button type="button" class="link-btn" id="toggle-account-form">追加</button>
-          <a class="link-btn" href="/dashboard">連携設定</a>
+          <a class="link-btn" href="/classic-dashboard">旧連携</a>
         </div>
         <form class="account-form hidden" id="account-form">
           <input id="new-account-username" autocomplete="off" placeholder="@username">
@@ -785,7 +785,7 @@
         </div>
         <div class="top-actions">
           <a class="secondary" href="/actions">旧アクション</a>
-          <a class="primary" href="/dashboard">ホーム</a>
+          <a class="primary" href="/console">ホーム</a>
         </div>
       </header>
 
@@ -1083,7 +1083,7 @@
 
       if (!state.accounts.length) {
         els.accountName.textContent = '未連携';
-        els.accountState.innerHTML = '<a href="/dashboard">X連携を設定</a>';
+        els.accountState.innerHTML = '<a href="/classic-dashboard">旧画面でX連携を設定</a>';
         els.accountList.innerHTML = '';
         return;
       }

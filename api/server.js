@@ -266,6 +266,10 @@ app.get('/', (req, res) => {
 });
 
 app.get('/dashboard', (req, res) => {
+  res.redirect(302, '/console');
+});
+
+app.get('/classic-dashboard', (req, res) => {
   res.sendFile(path.join(__dirname, '../dashboard/index.html'));
 });
 
