@@ -21,6 +21,10 @@ const created = {
   parentOperationIds: [],
 };
 
+function byOr(or) {
+  return or.length ? { OR: or } : { id: { in: [] } };
+}
+
 function assert(condition, message) {
   if (!condition) throw new Error(message);
 }
@@ -102,11 +106,19 @@ async function cleanupSmokeRows(userId, options = {}) {
     ? new Date(Date.now() - (Number(options.staleHours) || 24) * 60 * 60 * 1000)
     : null;
 
-  const accountWhere = {
-    userId,
-    username: { startsWith: accountPrefix },
-    ...(staleBefore ? { createdAt: { lt: staleBefore } } : {}),
-  };
+  const accountWhere = options.stale
+    ? {
+        userId,
+        username: { startsWith: accountPrefix },
+        createdAt: { lt: staleBefore },
+      }
+    : {
+        userId,
+        ...byOr([
+          ...(created.accountIds.length ? [{ id: { in: created.accountIds } }] : []),
+          { username: { contains: smokeId } },
+        ]),
+      };
 
   const accounts = await prisma.xAccount.findMany({
     where: accountWhere,
@@ -114,23 +126,30 @@ async function cleanupSmokeRows(userId, options = {}) {
   });
   const accountIds = accounts.map((account) => account.id);
 
-  const scheduleWhere = accountIds.length
-    ? { userId, accountId: { in: accountIds } }
-    : { userId, id: { in: [] } };
+  const scheduleWhere = {
+    userId,
+    ...byOr([
+      ...(created.scheduleIds.length ? [{ id: { in: created.scheduleIds } }] : []),
+      ...(accountIds.length ? [{ accountId: { in: accountIds } }] : []),
+      { name: { contains: smokeId } },
+    ]),
+  };
   const schedules = await prisma.scheduledAction.findMany({
     where: scheduleWhere,
     select: { id: true },
   });
   const scheduleIds = schedules.map((schedule) => schedule.id);
 
+  const explicitOperationIds = [...created.operationIds, ...created.parentOperationIds];
   const operations = await prisma.operation.findMany({
     where: {
       userId,
-      OR: [
+      ...byOr([
+        ...(explicitOperationIds.length ? [{ id: { in: explicitOperationIds } }] : []),
         ...(accountIds.length ? [{ accountId: { in: accountIds } }] : []),
         ...(scheduleIds.length ? [{ scheduledActionId: { in: scheduleIds } }] : []),
         { config: { contains: smokeId } },
-      ],
+      ]),
     },
     select: { id: true, parentOperationId: true },
   });
@@ -140,10 +159,11 @@ async function cleanupSmokeRows(userId, options = {}) {
 
   await prisma.scheduledActionRun.deleteMany({
     where: {
-      OR: [
+      ...byOr([
+        ...(created.runIds.length ? [{ id: { in: created.runIds } }] : []),
         ...(scheduleIds.length ? [{ scheduledActionId: { in: scheduleIds } }] : []),
         ...(operationIds.length ? [{ operationId: { in: operationIds } }] : []),
-      ],
+      ]),
     },
   });
   if (operationIds.length) {
@@ -173,6 +193,48 @@ async function cleanupSmokeRows(userId, options = {}) {
     schedules: scheduleIds.length,
     operations: operationIds.length,
   };
+}
+
+async function exerciseAccountApi(token, accounts) {
+  const updatedDisplayName = `Smoke Primary ${smokeId}`;
+  const patchResponse = await requestJson(`/api/accounts/${accounts[0].id}`, {
+    method: 'PATCH',
+    token,
+    body: { displayName: updatedDisplayName },
+  });
+  assert(patchResponse.account?.displayName === updatedDisplayName, 'PATCH /api/accounts/:id did not update displayName.');
+
+  const defaultResponse = await requestJson(`/api/accounts/${accounts[1].id}/default`, {
+    method: 'POST',
+    token,
+  });
+  assert(defaultResponse.account?.id === accounts[1].id, 'POST /api/accounts/:id/default returned the wrong account.');
+  assert(defaultResponse.account?.isDefault === true, 'POST /api/accounts/:id/default did not mark the account as default.');
+
+  const listResponse = await requestJson('/api/accounts', { token });
+  assert(
+    listResponse.defaultAccountId === accounts[1].id,
+    'GET /api/accounts did not expose the updated default account.'
+  );
+
+  return {
+    patchedAccountId: accounts[0].id,
+    patchedDisplayName: patchResponse.account.displayName,
+    defaultAccountId: listResponse.defaultAccountId,
+  };
+}
+
+async function exerciseAccountDeleteApi(token, accounts) {
+  const results = [];
+  for (const account of accounts) {
+    const response = await requestJson(`/api/accounts/${account.id}`, {
+      method: 'DELETE',
+      token,
+    });
+    assert(response.deleted === true, `DELETE /api/accounts/${account.id} did not confirm deletion.`);
+    results.push({ id: account.id, deleted: response.deleted });
+  }
+  return results;
 }
 
 async function createSmokeAccounts(userId) {
@@ -303,6 +365,7 @@ async function main() {
     accountIds.every((accountId) => accountsResponse.accounts.some((account) => account.id === accountId)),
     'Temporary accounts are not visible from /api/console/accounts.'
   );
+  const accountApi = await exerciseAccountApi(token, accounts);
 
   const executeResponse = await requestJson('/api/console/actions/execute', {
     method: 'POST',
@@ -411,6 +474,7 @@ async function main() {
     runNowResponses.every((runNow) => historyIds.has(runNow.operationId)),
     'Scheduled run operations were not visible in filtered history.'
   );
+  const accountDeletes = await exerciseAccountDeleteApi(token, accounts);
 
   const summary = {
     ok: true,
@@ -418,6 +482,10 @@ async function main() {
     smokeId,
     staleCleanup,
     accounts: accounts.map((account) => ({ id: account.id, username: account.username })),
+    accountApi: {
+      ...accountApi,
+      deletes: accountDeletes,
+    },
     immediate: {
       parentOperationId: executeResponse.parentOperationId,
       parentStatus: parent.operation.status,
