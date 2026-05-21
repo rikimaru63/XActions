@@ -49,6 +49,7 @@
     "verify:x402": "node scripts/verify-x402.js",
     "verify:headless": "node scripts/verify-headless.js",
     "smoke:console-ui": "node scripts/smoke-console-ui.js",
+    "smoke:console-scheduler": "node scripts/smoke-console-scheduler.js",
     "test:payment": "node scripts/test-x402-payment.js",
     "deploy": "bash scripts/deploy.sh",
     "deploy:railway": "bash scripts/deploy.sh railway",
