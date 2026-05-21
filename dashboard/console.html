@@ -1463,18 +1463,24 @@
           return;
         }
 
-        list.innerHTML = data.runs.map((run) => `
-          <div class="run-item">
-            <div class="history-top">
-              <div>
-                <div class="history-title">${escapeHtml(jaStatus(run.status))}</div>
-                <div class="history-meta">${escapeHtml(`予定 ${timeText(run.scheduledFor) || '-'}`)}</div>
+        list.innerHTML = data.runs.map((run) => {
+          const runStatus = run.operationStatus || run.status;
+          const account = run.account?.username ? `@${run.account.username}` : '';
+          const operation = run.operationId ? `操作 ${run.operationId.slice(0, 8)}` : '';
+          const meta = [`予定 ${timeText(run.scheduledFor) || '-'}`, account, operation].filter(Boolean).join(' / ');
+          return `
+            <div class="run-item">
+              <div class="history-top">
+                <div>
+                  <div class="history-title">${escapeHtml(jaStatus(runStatus))}</div>
+                  <div class="history-meta">${escapeHtml(meta)}</div>
+                </div>
+                <span class="badge ${statusBadgeClass(runStatus)}">${escapeHtml(run.operationType || '予約')}</span>
               </div>
-              <span class="badge ${statusBadgeClass(run.status)}">${escapeHtml(run.operationType || '予約')}</span>
+              <div class="history-meta">${escapeHtml(run.error || runResultDetail(run) || runTimeDetail(run))}</div>
             </div>
-            <div class="history-meta">${escapeHtml(run.error || runTimeDetail(run))}</div>
-          </div>
-        `).join('');
+          `;
+        }).join('');
       } catch (error) {
         list.innerHTML = `<div class="empty">${escapeHtml(error.message)}</div>`;
       }
@@ -1485,6 +1491,17 @@
       if (run.startedAt) parts.push(`開始 ${timeText(run.startedAt)}`);
       if (run.finishedAt) parts.push(`終了 ${timeText(run.finishedAt)}`);
       return parts.join(' / ') || '処理待ち';
+    }
+
+    function runResultDetail(run) {
+      const result = run.result || run.operation?.result;
+      if (!result || typeof result !== 'object' || Array.isArray(result)) return '';
+      if (result.batch) return `完了 ${result.completed || 0} / 失敗 ${result.failed || 0} / 全体 ${result.total || 0}`;
+      if (typeof result.preview === 'string') return result.preview.slice(0, 120);
+      if (typeof result.message === 'string') return result.message.slice(0, 120);
+      if (typeof result.count !== 'undefined') return `件数 ${result.count}`;
+      if (result.dryRun && result.action) return `確認のみ / ${result.action}`;
+      return '';
     }
 
     async function runScheduleNow(id, selected) {

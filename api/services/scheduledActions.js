@@ -5,6 +5,7 @@ import {
   createActionPayload,
   parseJson,
   sanitizeConfig,
+  sanitizeOperation,
 } from './consoleActions.js';
 import {
   getAccountForUser,
@@ -60,6 +61,34 @@ function publicSchedule(schedule, includeConfig = true) {
     lastError: schedule.lastError,
     createdAt: schedule.createdAt,
     updatedAt: schedule.updatedAt,
+  };
+}
+
+function publicScheduledActionRun(run) {
+  const operation = run.operation ? sanitizeOperation(run.operation) : null;
+  const account = operation?.account ? sanitizeAccount(operation.account) : null;
+  const safeOperation = operation
+    ? {
+        ...operation,
+        ...(account ? { account } : {}),
+      }
+    : null;
+
+  return {
+    id: run.id,
+    scheduledActionId: run.scheduledActionId,
+    operationId: run.operationId,
+    operationType: safeOperation?.type || null,
+    operationStatus: safeOperation?.status || null,
+    account,
+    status: run.status,
+    scheduledFor: run.scheduledFor,
+    startedAt: run.startedAt,
+    finishedAt: run.finishedAt,
+    error: run.error || safeOperation?.error || null,
+    result: safeOperation?.result || null,
+    operation: safeOperation,
+    createdAt: run.createdAt,
   };
 }
 
@@ -403,6 +432,7 @@ export {
   decryptScheduledConfig,
   enqueueScheduledAction,
   processDueScheduledActions,
+  publicScheduledActionRun,
   publicSchedule,
   startScheduledActionScheduler,
   stopScheduledActionScheduler,

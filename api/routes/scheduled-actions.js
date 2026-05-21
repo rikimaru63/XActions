@@ -5,6 +5,7 @@ import { queueJob } from '../services/jobQueue.js';
 import {
   createSchedulesFromRequest,
   enqueueScheduledAction,
+  publicScheduledActionRun,
   publicSchedule,
 } from '../services/scheduledActions.js';
 import { calculateNextRunAt, normalizeScheduleInput } from '../services/scheduleUtils.js';
@@ -205,24 +206,30 @@ router.get('/:id/runs', async (req, res) => {
 
     const runs = await prisma.scheduledActionRun.findMany({
       where: { scheduledActionId: schedule.id },
-      include: { operation: true },
+      include: {
+        operation: {
+          include: {
+            account: {
+              select: {
+                id: true,
+                username: true,
+                displayName: true,
+                status: true,
+                isDefault: true,
+                lastVerifiedAt: true,
+                lastUsedAt: true,
+                error: true,
+              },
+            },
+          },
+        },
+      },
       orderBy: { createdAt: 'desc' },
       take: Math.min(Math.max(Number(req.query.limit) || 30, 1), 100),
     });
 
     res.json({
-      runs: runs.map((run) => ({
-        id: run.id,
-        scheduledActionId: run.scheduledActionId,
-        operationId: run.operationId,
-        operationType: run.operation?.type || null,
-        status: run.status,
-        scheduledFor: run.scheduledFor,
-        startedAt: run.startedAt,
-        finishedAt: run.finishedAt,
-        error: run.error || run.operation?.error || null,
-        createdAt: run.createdAt,
-      })),
+      runs: runs.map(publicScheduledActionRun),
     });
   } catch (error) {
     console.error('Scheduled action runs error:', error);

@@ -25,6 +25,7 @@ import {
   normalizeScheduleMaxRetries,
   queueAttemptsForSchedule,
 } from '../api/services/retryPolicy.js';
+import { publicScheduledActionRun } from '../api/services/scheduledActions.js';
 import { calculateNextRunAt } from '../api/services/scheduleUtils.js';
 
 describe('console scheduler helpers', () => {
@@ -713,6 +714,51 @@ describe('console scheduler helpers', () => {
     expect(normalizeScheduleMaxRetries(99)).toBe(5);
     expect(queueAttemptsForSchedule(0)).toBe(1);
     expect(queueAttemptsForSchedule(2)).toBe(3);
+  });
+
+  it('exposes sanitized operation details in scheduled run history', () => {
+    const run = publicScheduledActionRun({
+      id: 'run_1',
+      scheduledActionId: 'schedule_1',
+      operationId: 'operation_1',
+      status: 'completed',
+      scheduledFor: new Date('2026-05-21T00:00:00.000Z'),
+      startedAt: new Date('2026-05-21T00:00:01.000Z'),
+      finishedAt: new Date('2026-05-21T00:00:02.000Z'),
+      createdAt: new Date('2026-05-21T00:00:00.000Z'),
+      operation: {
+        id: 'operation_1',
+        type: 'postTweet',
+        status: 'completed',
+        config: JSON.stringify({
+          sourceFeatureId: 'postTweet',
+          text: 'secret post body',
+          textPreview: 'public preview',
+          sessionCookie: 'auth_token=secret',
+        }),
+        result: JSON.stringify({ dryRun: true, preview: '投稿プレビュー' }),
+        error: null,
+        account: {
+          id: 'acc_1',
+          username: 'source_account',
+          encryptedCookie: 'encrypted-secret',
+          status: 'active',
+          isDefault: true,
+        },
+      },
+    });
+
+    expect(run.operationStatus).toBe('completed');
+    expect(run.operationType).toBe('postTweet');
+    expect(run.account).toMatchObject({ id: 'acc_1', username: 'source_account' });
+    expect(run.account.encryptedCookie).toBeUndefined();
+    expect(run.result).toEqual({ dryRun: true, preview: '投稿プレビュー' });
+    expect(run.operation.config).toMatchObject({
+      sourceFeatureId: 'postTweet',
+      text: '[hidden]',
+      textPreview: 'public preview',
+      sessionCookie: '[hidden]',
+    });
   });
 
   it('distinguishes retrying jobs from final failures', () => {
