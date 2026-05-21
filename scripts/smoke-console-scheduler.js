@@ -1,6 +1,7 @@
 import 'dotenv/config';
 import { randomUUID } from 'crypto';
 import jwt from 'jsonwebtoken';
+import Queue from 'bull';
 import { PrismaClient } from '@prisma/client';
 import { encrypt } from '../api/services/sessionCrypto.js';
 
@@ -12,6 +13,17 @@ const smokePassword = process.env.XACTIONS_SMOKE_PASSWORD || '';
 const smokeToken = process.env.XACTIONS_SMOKE_TOKEN || '';
 const smokeId = `smoke_${Date.now()}_${randomUUID().slice(0, 8)}`;
 const accountPrefix = 'smoke_console_scheduler_';
+const sensitiveJobDataKeys = new Set([
+  'sessionCookie',
+  'encryptedCookie',
+  'cookie',
+  'cookies',
+  'authToken',
+  'accessToken',
+  'refreshToken',
+  'password',
+  'secret',
+]);
 
 const created = {
   accountIds: [],
@@ -339,6 +351,72 @@ async function pollScheduledRuns(runIds) {
   return result.runs;
 }
 
+function findSensitiveJobDataLeaks(value, path = 'job.data') {
+  const leaks = [];
+  if (value === null || typeof value === 'undefined') return leaks;
+
+  if (typeof value === 'string') {
+    if (value.includes(`auth_token=${smokeId}`) || value.includes(`ct0=${smokeId}`)) {
+      leaks.push(`${path}: contains raw smoke session cookie`);
+    }
+    return leaks;
+  }
+
+  if (typeof value !== 'object') return leaks;
+
+  if (Array.isArray(value)) {
+    value.forEach((item, index) => {
+      leaks.push(...findSensitiveJobDataLeaks(item, `${path}[${index}]`));
+    });
+    return leaks;
+  }
+
+  for (const [key, item] of Object.entries(value)) {
+    const itemPath = `${path}.${key}`;
+    if (sensitiveJobDataKeys.has(key)) leaks.push(`${itemPath}: forbidden key`);
+    leaks.push(...findSensitiveJobDataLeaks(item, itemPath));
+  }
+
+  return leaks;
+}
+
+async function assertQueuedJobsDoNotContainSessionData(operationIds) {
+  const queue = new Queue('operations', {
+    redis: {
+      host: process.env.REDIS_HOST || 'localhost',
+      port: process.env.REDIS_PORT || 6379,
+      password: process.env.REDIS_PASSWORD,
+    },
+  });
+
+  try {
+    const inspected = [];
+    const missing = [];
+    const leaks = [];
+
+    for (const operationId of operationIds) {
+      const job = await queue.getJob(operationId);
+      if (!job) {
+        missing.push(operationId);
+        continue;
+      }
+      inspected.push(operationId);
+      leaks.push(...findSensitiveJobDataLeaks(job.data, `job(${operationId}).data`));
+    }
+
+    assert(missing.length === 0, `Bull jobs were not retained for inspection: ${missing.join(', ')}`);
+    assert(leaks.length === 0, `Bull job data leaked account/session fields: ${leaks.join('; ')}`);
+
+    return {
+      inspected: inspected.length,
+      missing: missing.length,
+      leaks: leaks.length,
+    };
+  } finally {
+    await queue.close();
+  }
+}
+
 async function assertNoCurrentResidue(userId) {
   const [accounts, schedules, operations, runs] = await Promise.all([
     prisma.xAccount.count({
@@ -473,6 +551,7 @@ async function main() {
   }
 
   const scheduledRuns = await pollScheduledRuns(created.runIds);
+  const bullJobData = await assertQueuedJobsDoNotContainSessionData(created.operationIds);
 
   for (const runNow of runNowResponses) {
     const runsResponse = await requestJson(`/api/scheduled-actions/${runNow.scheduleId}/runs?limit=5`, { token });
@@ -531,6 +610,7 @@ async function main() {
       status: schedule.status,
       hasLastError: !!schedule.lastError,
     })),
+    bullJobData,
     scheduledRuns: scheduledRuns.map((run) => ({
       id: run.id,
       scheduleId: run.scheduledActionId,
