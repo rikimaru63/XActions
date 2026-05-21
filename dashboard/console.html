@@ -397,6 +397,7 @@
     .detail-head {
       padding: 20px;
       border-bottom: 1px solid var(--line);
+      position: relative;
     }
 
     .detail-summary {
@@ -404,6 +405,22 @@
       font-size: 14px;
       line-height: 1.6;
       margin: 10px 0 14px;
+    }
+
+    .detail-toggle {
+      display: none;
+      position: absolute;
+      top: 12px;
+      right: 14px;
+      min-height: 34px;
+      border-radius: 999px;
+      border: 1px solid var(--line);
+      background: var(--surface-2);
+      color: var(--text);
+      padding: 0 12px;
+      cursor: pointer;
+      font-weight: 700;
+      font-size: 13px;
     }
 
     .tabs {
@@ -662,6 +679,16 @@
       .detail.open {
         transform: translateY(0);
       }
+
+      .detail-toggle {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+      }
+
+      .detail-head {
+        padding-right: 84px;
+      }
     }
 
     @media (max-width: 720px) {
@@ -766,8 +793,9 @@
       </section>
     </main>
 
-    <aside class="detail open" id="detail">
+    <aside class="detail" id="detail">
       <div class="detail-head">
+        <button type="button" class="detail-toggle" id="detail-toggle" aria-label="詳細を開く">開く</button>
         <div class="badges" id="detail-badges"></div>
         <h2 id="detail-title">機能を選択</h2>
         <p class="detail-summary" id="detail-summary">左の一覧から機能を選んでください。</p>
@@ -805,6 +833,7 @@
       mode: 'dryRun',
       query: '',
       selectedAccountIds: [],
+      detailOpen: false,
     };
 
     const MAX_ACCOUNT_SELECTION = 2;
@@ -822,6 +851,7 @@
       list: document.getElementById('feature-list'),
       search: document.getElementById('feature-search'),
       detail: document.getElementById('detail'),
+      detailToggle: document.getElementById('detail-toggle'),
       detailTitle: document.getElementById('detail-title'),
       detailSummary: document.getElementById('detail-summary'),
       detailBadges: document.getElementById('detail-badges'),
@@ -1231,6 +1261,7 @@
         button.addEventListener('click', () => {
           state.selectedFeatureId = button.dataset.feature;
           state.selectedTab = 'settings';
+          state.detailOpen = true;
           render();
           loadHistory();
         });
@@ -1249,7 +1280,7 @@
         return;
       }
 
-      els.detail.classList.add('open');
+      updateDetailSheet();
       els.detailTitle.textContent = selected.title;
       els.detailSummary.textContent = selected.summary;
       els.detailBadges.innerHTML = `
@@ -1269,6 +1300,13 @@
       renderSchedule(selected);
       if (state.selectedTab === 'schedule') loadSchedules(selected);
       if (state.selectedTab === 'history') loadHistory();
+    }
+
+    function updateDetailSheet() {
+      els.detail.classList.toggle('open', state.detailOpen);
+      if (!els.detailToggle) return;
+      els.detailToggle.textContent = state.detailOpen ? '閉じる' : '開く';
+      els.detailToggle.setAttribute('aria-label', state.detailOpen ? '詳細を閉じる' : '詳細を開く');
     }
 
     function renderField(field) {
@@ -1946,8 +1984,14 @@
     document.querySelectorAll('.tabs button').forEach((button) => {
       button.addEventListener('click', () => {
         state.selectedTab = button.dataset.tab;
+        state.detailOpen = true;
         renderDetail();
       });
+    });
+
+    els.detailToggle?.addEventListener('click', () => {
+      state.detailOpen = !state.detailOpen;
+      updateDetailSheet();
     });
 
     init();
