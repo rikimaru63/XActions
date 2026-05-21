@@ -341,6 +341,23 @@ function auditCatalog() {
     featureIds.add(feature.id);
     if (!categoryIds.has(feature.category)) missing.push(`${feature.id}: unknown category ${feature.category}`);
     if (feature.status !== 'available') missing.push(`${feature.id}: status is ${feature.status}`);
+
+    for (const field of feature.fields || []) {
+      if (['select', 'multiSelect'].includes(field.type)) {
+        if (!Array.isArray(field.options) || field.options.length < 2) {
+          missing.push(`${feature.id}.${field.key}: choice field is missing options`);
+        } else {
+          for (const option of field.options) {
+            if (!option.value || !option.label) {
+              missing.push(`${feature.id}.${field.key}: choice option is missing value or label`);
+            }
+          }
+        }
+      }
+      if (field.placeholder && /\w+\s+\/\s+\w+/.test(field.placeholder)) {
+        missing.push(`${feature.id}.${field.key}: placeholder exposes slash-separated internal values`);
+      }
+    }
   }
 
   for (const feature of consoleFeatures) {
@@ -508,6 +525,9 @@ function auditUi() {
     'function updateDetailSheet',
     '<html lang="ja">',
     'function scheduleTypeLabel',
+    "field.type === 'select'",
+    "field.type === 'multiSelect'",
+    'data-multi-field',
     '従来の操作',
     '従来版で連携',
     'この機能に予約設定はありません。',

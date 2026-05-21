@@ -531,6 +531,15 @@
       min-height: 18px;
     }
 
+    .check-list {
+      display: grid;
+      gap: 8px;
+    }
+
+    .check-list .check {
+      min-height: 38px;
+    }
+
     .mode {
       display: grid;
       grid-template-columns: 1fr 1fr;
@@ -981,6 +990,9 @@
     }
 
     function fieldValue(field) {
+      if (field.type === 'multiSelect') {
+        return [...document.querySelectorAll(`[data-multi-field="${field.key}"]:checked`)].map((el) => el.value);
+      }
       const el = document.querySelector(`[data-field="${field.key}"]`);
       if (!el) return undefined;
       if (field.type === 'boolean') return el.checked;
@@ -1424,6 +1436,36 @@
           <div class="field">
             <label for="field-${escapeHtml(field.key)}">${escapeHtml(field.label)}</label>
             <textarea id="field-${escapeHtml(field.key)}" data-field="${escapeHtml(field.key)}" maxlength="${field.max || ''}" placeholder="${escapeHtml(field.placeholder || '')}"></textarea>
+          </div>
+        `;
+      }
+      if (field.type === 'select') {
+        const options = field.options || [];
+        return `
+          <div class="field">
+            <label for="field-${escapeHtml(field.key)}">${escapeHtml(field.label)}</label>
+            <select id="field-${escapeHtml(field.key)}" data-field="${escapeHtml(field.key)}">
+              ${options.map((option) => `
+                <option value="${escapeHtml(option.value)}" ${option.value === value ? 'selected' : ''}>${escapeHtml(option.label || option.value)}</option>
+              `).join('')}
+            </select>
+          </div>
+        `;
+      }
+      if (field.type === 'multiSelect') {
+        const options = field.options || [];
+        const defaults = new Set(field.default || []);
+        return `
+          <div class="field">
+            <label>${escapeHtml(field.label)}</label>
+            <div class="check-list">
+              ${options.map((option) => `
+                <label class="check">
+                  <span>${escapeHtml(option.label || option.value)}</span>
+                  <input type="checkbox" data-multi-field="${escapeHtml(field.key)}" value="${escapeHtml(option.value)}" ${defaults.has(option.value) ? 'checked' : ''}>
+                </label>
+              `).join('')}
+            </div>
           </div>
         `;
       }

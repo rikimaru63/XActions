@@ -23,6 +23,24 @@ const riskLabels = {
   high: '高',
 };
 
+const dataFormatOptions = [
+  { value: 'json', label: 'JSON' },
+  { value: 'csv', label: 'CSV' },
+];
+
+const timelineFilterOptions = [
+  { value: 'latest', label: '新着' },
+  { value: 'top', label: '話題' },
+  { value: 'people', label: 'ユーザー' },
+  { value: 'photos', label: '画像' },
+  { value: 'videos', label: '動画' },
+];
+
+const sentimentModeOptions = [
+  { value: 'rules', label: '通常分析' },
+  { value: 'llm', label: 'AI分析' },
+];
+
 const features = [
   {
     id: 'targetEngage',
@@ -154,7 +172,7 @@ const features = [
     riskLevel: 'high',
     status: 'available',
     fields: [
-      { key: 'query', label: '検索語句', type: 'text', placeholder: 'keyword OR #hashtag' },
+      { key: 'query', label: '検索語句', type: 'text', placeholder: 'キーワードまたは #タグ' },
       { key: 'targetUsername', label: '対象ユーザー', type: 'username', placeholder: '@username' },
       { key: 'maxLikes', label: '最大Like数', type: 'number', min: 1, max: 50, default: 10 },
     ],
@@ -175,7 +193,16 @@ const features = [
     status: 'available',
     fields: [
       { key: 'tweetUrl', label: 'ポストURL', type: 'url', required: true, placeholder: 'https://x.com/user/status/...' },
-      { key: 'engagementType', label: '反応種別', type: 'text', placeholder: 'likes または retweets' },
+      {
+        key: 'engagementType',
+        label: '反応種別',
+        type: 'select',
+        default: 'likes',
+        options: [
+          { value: 'likes', label: 'Like' },
+          { value: 'retweets', label: 'リポスト' },
+        ],
+      },
       { key: 'maxFollows', label: 'フォロー上限', type: 'number', min: 1, max: 50, default: 10 },
     ],
   },
@@ -194,7 +221,7 @@ const features = [
     riskLevel: 'high',
     status: 'available',
     fields: [
-      { key: 'query', label: '検索語句', type: 'text', required: true, placeholder: 'keyword OR #hashtag' },
+      { key: 'query', label: '検索語句', type: 'text', required: true, placeholder: 'キーワードまたは #タグ' },
       { key: 'maxFollows', label: 'フォロー上限', type: 'number', min: 1, max: 50, default: 10 },
     ],
   },
@@ -213,7 +240,7 @@ const features = [
     riskLevel: 'high',
     status: 'available',
     fields: [
-      { key: 'query', label: '検索語句', type: 'text', placeholder: 'keyword OR #hashtag' },
+      { key: 'query', label: '検索語句', type: 'text', placeholder: 'キーワードまたは #タグ' },
       { key: 'targetUsername', label: '対象ユーザー', type: 'username', placeholder: '@username' },
       { key: 'comment', label: 'コメント', type: 'textarea', required: true, max: 280 },
       { key: 'maxComments', label: 'コメント上限', type: 'number', min: 1, max: 20, default: 3 },
@@ -410,7 +437,7 @@ const features = [
     fields: [
       { key: 'conversationUrl', label: '会話URL', type: 'url', placeholder: '空欄の場合は会話一覧を取得' },
       { key: 'limit', label: '取得件数', type: 'number', min: 1, max: 500, default: 100 },
-      { key: 'format', label: '形式', type: 'text', placeholder: 'json / csv' },
+      { key: 'format', label: '形式', type: 'select', default: 'json', options: dataFormatOptions },
     ],
   },
   {
@@ -524,9 +551,9 @@ const features = [
     riskLevel: 'low',
     status: 'available',
     fields: [
-      { key: 'query', label: '検索語句', type: 'text', required: true, placeholder: 'keyword OR #hashtag' },
+      { key: 'query', label: '検索語句', type: 'text', required: true, placeholder: 'キーワードまたは #タグ' },
       { key: 'limit', label: '取得件数', type: 'number', min: 1, max: 100, default: 30 },
-      { key: 'filter', label: '表示順', type: 'text', placeholder: 'latest / top / people / photos / videos' },
+      { key: 'filter', label: '表示順', type: 'select', default: 'latest', options: timelineFilterOptions },
     ],
   },
   {
@@ -546,7 +573,7 @@ const features = [
     fields: [
       { key: 'hashtag', label: 'ハッシュタグ', type: 'text', required: true, placeholder: '#xactions' },
       { key: 'limit', label: '取得件数', type: 'number', min: 1, max: 500, default: 50 },
-      { key: 'filter', label: '表示順', type: 'text', placeholder: 'latest / top / people / photos / videos' },
+      { key: 'filter', label: '表示順', type: 'select', default: 'latest', options: timelineFilterOptions },
     ],
   },
   {
@@ -582,7 +609,19 @@ const features = [
     riskLevel: 'low',
     status: 'available',
     fields: [
-      { key: 'tab', label: 'タブ', type: 'text', placeholder: 'foryou / trending / news / sports / entertainment' },
+      {
+        key: 'tab',
+        label: 'タブ',
+        type: 'select',
+        default: 'foryou',
+        options: [
+          { value: 'foryou', label: 'おすすめ' },
+          { value: 'trending', label: 'トレンド' },
+          { value: 'news', label: 'ニュース' },
+          { value: 'sports', label: 'スポーツ' },
+          { value: 'entertainment', label: 'エンタメ' },
+        ],
+      },
       { key: 'limit', label: '取得件数', type: 'number', min: 1, max: 100, default: 30 },
     ],
   },
@@ -602,7 +641,7 @@ const features = [
     status: 'available',
     fields: [
       { key: 'limit', label: '取得件数', type: 'number', min: 1, max: 200, default: 50 },
-      { key: 'format', label: '形式', type: 'text', placeholder: 'json または csv' },
+      { key: 'format', label: '形式', type: 'select', default: 'json', options: dataFormatOptions },
     ],
   },
   {
@@ -622,7 +661,17 @@ const features = [
     fields: [
       { key: 'username', label: '対象ユーザー', type: 'username', required: true, placeholder: '@username' },
       { key: 'limit', label: '取得件数', type: 'number', min: 1, max: 500, default: 50 },
-      { key: 'type', label: '種類', type: 'text', placeholder: 'all / images / videos' },
+      {
+        key: 'type',
+        label: '種類',
+        type: 'select',
+        default: 'all',
+        options: [
+          { value: 'all', label: 'すべて' },
+          { value: 'images', label: '画像' },
+          { value: 'videos', label: '動画' },
+        ],
+      },
     ],
   },
   {
@@ -641,10 +690,20 @@ const features = [
     status: 'available',
     page: '/monitor',
     fields: [
-      { key: 'mode', label: '取得対象', type: 'text', placeholder: 'live / scheduled / scrape' },
-      { key: 'topic', label: '検索語', type: 'text', placeholder: 'live検索時のみ任意' },
-      { key: 'username', label: 'ユーザー', type: 'username', placeholder: 'scheduled時のみ任意' },
-      { key: 'spaceUrl', label: 'Space URL', type: 'url', placeholder: 'scrape時に入力' },
+      {
+        key: 'mode',
+        label: '取得対象',
+        type: 'select',
+        default: 'live',
+        options: [
+          { value: 'live', label: '配信中' },
+          { value: 'scheduled', label: '予約中' },
+          { value: 'scrape', label: 'URLから取得' },
+        ],
+      },
+      { key: 'topic', label: '検索語', type: 'text', placeholder: '配信中を探す場合のみ任意' },
+      { key: 'username', label: 'ユーザー', type: 'username', placeholder: '予約中を探す場合のみ任意' },
+      { key: 'spaceUrl', label: 'Spaceリンク', type: 'url', placeholder: 'URLから取得する場合のみ入力' },
       { key: 'limit', label: '取得件数', type: 'number', min: 1, max: 100, default: 20 },
     ],
   },
@@ -684,7 +743,17 @@ const features = [
     page: '/thread',
     fields: [
       { key: 'tweetUrl', label: '投稿URL', type: 'url', required: true, placeholder: 'https://x.com/user/status/...' },
-      { key: 'format', label: '出力形式', type: 'text', placeholder: 'text / markdown / json' },
+      {
+        key: 'format',
+        label: '出力形式',
+        type: 'select',
+        default: 'text',
+        options: [
+          { value: 'text', label: 'テキスト' },
+          { value: 'markdown', label: 'Markdown' },
+          { value: 'json', label: 'JSON' },
+        ],
+      },
       { key: 'maxTweets', label: '取得上限', type: 'number', min: 1, max: 100, default: 100 },
     ],
   },
@@ -705,7 +774,7 @@ const features = [
     page: '/analytics-dashboard',
     fields: [
       { key: 'text', label: '分析するテキスト', type: 'textarea', required: true, max: 10000 },
-      { key: 'mode', label: '分析方式', type: 'text', placeholder: 'rules / llm' },
+      { key: 'mode', label: '分析方式', type: 'select', default: 'rules', options: sentimentModeOptions },
     ],
   },
   {
@@ -745,7 +814,18 @@ const features = [
     fields: [
       { key: 'username', label: '対象ユーザー', type: 'username', required: true, placeholder: '@username' },
       { key: 'days', label: '期間', type: 'number', min: 1, max: 365, default: 30, suffix: '日' },
-      { key: 'interval', label: '集計単位', type: 'text', placeholder: 'day / week / month / raw' },
+      {
+        key: 'interval',
+        label: '集計単位',
+        type: 'select',
+        default: 'day',
+        options: [
+          { value: 'day', label: '日別' },
+          { value: 'week', label: '週別' },
+          { value: 'month', label: '月別' },
+          { value: 'raw', label: '全データ' },
+        ],
+      },
     ],
   },
   {
@@ -825,9 +905,9 @@ const features = [
     page: '/price-correlation',
     fields: [
       { key: 'tweets', label: '投稿データJSON', type: 'textarea', required: true, max: 50000, placeholder: '[{"timestamp":1710000000000,"text":"..."}]' },
-      { key: 'tokenId', label: 'CoinGecko ID', type: 'text', placeholder: 'bitcoin / solana' },
-      { key: 'network', label: 'GeckoTerminal network', type: 'text', placeholder: 'solana / eth' },
-      { key: 'poolAddress', label: 'Pool address', type: 'text' },
+      { key: 'tokenId', label: '銘柄ID', type: 'text', placeholder: '例: bitcoin, solana' },
+      { key: 'network', label: 'ネットワーク', type: 'text', placeholder: '例: solana, eth' },
+      { key: 'poolAddress', label: 'プールアドレス', type: 'text' },
       { key: 'windows', label: '比較時間', type: 'text', placeholder: '1,24' },
     ],
   },
@@ -847,10 +927,20 @@ const features = [
     status: 'available',
     page: '/monitor',
     fields: [
-      { key: 'target', label: '監視対象', type: 'text', required: true, placeholder: '@username または keyword' },
-      { key: 'monitorType', label: '種類', type: 'text', placeholder: 'mentions / keyword / replies' },
+      { key: 'target', label: '監視対象', type: 'text', required: true, placeholder: '@username またはキーワード' },
+      {
+        key: 'monitorType',
+        label: '種類',
+        type: 'select',
+        default: 'mentions',
+        options: [
+          { value: 'mentions', label: 'メンション' },
+          { value: 'keyword', label: 'キーワード' },
+          { value: 'replies', label: '返信' },
+        ],
+      },
       { key: 'limit', label: '取得件数', type: 'number', min: 1, max: 100, default: 20 },
-      { key: 'sentimentMode', label: '感情分析', type: 'text', placeholder: 'rules / llm' },
+      { key: 'sentimentMode', label: '感情分析', type: 'select', default: 'rules', options: sentimentModeOptions },
     ],
   },
   {
@@ -869,9 +959,20 @@ const features = [
     status: 'available',
     page: '/workflows',
     fields: [
-      { key: 'action', label: '操作', type: 'text', placeholder: 'list / actions / run / runs' },
+      {
+        key: 'action',
+        label: '操作',
+        type: 'select',
+        default: 'list',
+        options: [
+          { value: 'list', label: '一覧' },
+          { value: 'actions', label: '使える操作' },
+          { value: 'run', label: '実行' },
+          { value: 'runs', label: '実行履歴' },
+        ],
+      },
       { key: 'workflowId', label: 'ワークフローID', type: 'text' },
-      { key: 'context', label: '入力JSON', type: 'textarea', max: 20000, placeholder: '{"keyword":"xactions"}' },
+      { key: 'context', label: '追加データ', type: 'textarea', max: 20000, placeholder: '{"keyword":"xactions"}' },
       { key: 'limit', label: '履歴件数', type: 'number', min: 1, max: 100, default: 20 },
     ],
   },
@@ -891,7 +992,22 @@ const features = [
     status: 'available',
     page: '/agent',
     fields: [
-      { key: 'action', label: '操作', type: 'text', placeholder: 'status / config / schedule / report / content / score / start / stop' },
+      {
+        key: 'action',
+        label: '操作',
+        type: 'select',
+        default: 'status',
+        options: [
+          { value: 'status', label: '状態' },
+          { value: 'config', label: '設定' },
+          { value: 'schedule', label: '予定' },
+          { value: 'report', label: 'レポート' },
+          { value: 'content', label: '投稿候補' },
+          { value: 'score', label: 'スコア' },
+          { value: 'start', label: '開始' },
+          { value: 'stop', label: '停止' },
+        ],
+      },
       { key: 'text', label: 'スコア対象テキスト', type: 'textarea', max: 10000 },
       { key: 'days', label: '集計日数', type: 'number', min: 1, max: 90, default: 30 },
       { key: 'limit', label: '取得件数', type: 'number', min: 1, max: 100, default: 20 },
@@ -913,9 +1029,29 @@ const features = [
     status: 'available',
     endpoint: '/api/datasets',
     fields: [
-      { key: 'action', label: '操作', type: 'text', placeholder: 'list / get / export' },
+      {
+        key: 'action',
+        label: '操作',
+        type: 'select',
+        default: 'list',
+        options: [
+          { value: 'list', label: '一覧' },
+          { value: 'get', label: '表示' },
+          { value: 'export', label: '書き出し' },
+        ],
+      },
       { key: 'name', label: 'データセット名', type: 'text' },
-      { key: 'format', label: '形式', type: 'text', placeholder: 'json / csv / jsonl' },
+      {
+        key: 'format',
+        label: '形式',
+        type: 'select',
+        default: 'json',
+        options: [
+          { value: 'json', label: 'JSON' },
+          { value: 'csv', label: 'CSV' },
+          { value: 'jsonl', label: 'JSONL' },
+        ],
+      },
       { key: 'offset', label: '開始位置', type: 'number', min: 0, max: 100000, default: 0 },
       { key: 'limit', label: '取得件数', type: 'number', min: 1, max: 1000, default: 100 },
     ],
@@ -936,12 +1072,54 @@ const features = [
     status: 'available',
     endpoint: '/api/portability/export',
     fields: [
-      { key: 'action', label: '操作', type: 'text', placeholder: 'exports / export / migrate / diff' },
+      {
+        key: 'action',
+        label: '操作',
+        type: 'select',
+        default: 'exports',
+        options: [
+          { value: 'exports', label: '保存済み一覧' },
+          { value: 'export', label: '書き出し' },
+          { value: 'migrate', label: '移行' },
+          { value: 'diff', label: '差分比較' },
+        ],
+      },
       { key: 'username', label: '対象ユーザー', type: 'username', placeholder: '空欄なら選択中のX連携' },
-      { key: 'formats', label: '形式', type: 'text', placeholder: 'json,csv,md' },
-      { key: 'only', label: '対象データ', type: 'text', placeholder: 'profile,tweets,followers,following,bookmarks' },
+      {
+        key: 'formats',
+        label: '形式',
+        type: 'multiSelect',
+        default: ['json', 'csv', 'md'],
+        options: [
+          { value: 'json', label: 'JSON' },
+          { value: 'csv', label: 'CSV' },
+          { value: 'md', label: 'Markdown' },
+        ],
+      },
+      {
+        key: 'only',
+        label: '対象データ',
+        type: 'multiSelect',
+        default: [],
+        options: [
+          { value: 'profile', label: 'プロフィール' },
+          { value: 'tweets', label: '投稿' },
+          { value: 'followers', label: 'フォロワー' },
+          { value: 'following', label: 'フォロー中' },
+          { value: 'bookmarks', label: 'ブックマーク' },
+        ],
+      },
       { key: 'limit', label: '取得上限', type: 'number', min: 1, max: 5000, default: 500 },
-      { key: 'platform', label: '移行先', type: 'text', placeholder: 'bluesky / mastodon' },
+      {
+        key: 'platform',
+        label: '移行先',
+        type: 'select',
+        default: 'bluesky',
+        options: [
+          { value: 'bluesky', label: 'Bluesky' },
+          { value: 'mastodon', label: 'Mastodon' },
+        ],
+      },
       { key: 'exportDir', label: 'エクスポートディレクトリ', type: 'text' },
       { key: 'dirA', label: '比較元ディレクトリ', type: 'text' },
       { key: 'dirB', label: '比較先ディレクトリ', type: 'text' },

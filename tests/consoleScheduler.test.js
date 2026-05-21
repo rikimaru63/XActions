@@ -129,6 +129,36 @@ describe('console scheduler helpers', () => {
     expect(consoleRoute).toContain('この機能はこの画面から実行できません。');
   });
 
+  it('renders code-like option fields as Japanese choices', () => {
+    const html = readFileSync(new URL('../dashboard/console.html', import.meta.url), 'utf8');
+    const catalog = getPublicFeatureCatalog();
+    const feature = (id) => catalog.features.find((item) => item.id === id);
+    const field = (featureId, key) => feature(featureId).fields.find((item) => item.key === key);
+
+    expect(html).toContain("field.type === 'select'");
+    expect(html).toContain("field.type === 'multiSelect'");
+    expect(html).toContain('data-multi-field');
+
+    expect(field('spaces', 'mode')).toMatchObject({
+      type: 'select',
+      options: expect.arrayContaining([
+        { value: 'live', label: '配信中' },
+        { value: 'scheduled', label: '予約中' },
+        { value: 'scrape', label: 'URLから取得' },
+      ]),
+    });
+    expect(field('exportDMs', 'format')).toMatchObject({ type: 'select' });
+    expect(field('workflows', 'action')).toMatchObject({ type: 'select' });
+    expect(field('portability', 'formats')).toMatchObject({ type: 'multiSelect' });
+    expect(field('portability', 'only')).toMatchObject({ type: 'multiSelect' });
+
+    for (const item of catalog.features) {
+      for (const input of item.fields || []) {
+        expect(input.placeholder || '').not.toMatch(/\w+\s+\/\s+\w+/);
+      }
+    }
+  });
+
   it('shows live readiness guidance for the final two-account verification', () => {
     const html = readFileSync(new URL('../dashboard/console.html', import.meta.url), 'utf8');
 
@@ -1517,6 +1547,20 @@ describe('console scheduler helpers', () => {
         limit: 100,
         dryRun: false,
       },
+    });
+
+    const portabilityFromChoiceFields = createActionPayload(
+      getFeatureById('portability'),
+      { action: 'export', username: '@source_user', formats: ['json', 'csv'], only: ['bookmarks'], limit: 100 },
+      'live'
+    );
+    expect(portabilityFromChoiceFields.operationConfig).toMatchObject({
+      formats: ['json', 'csv'],
+      only: ['bookmarks'],
+    });
+    expect(portabilityFromChoiceFields.jobConfig).toMatchObject({
+      formats: ['json', 'csv'],
+      only: ['bookmarks'],
     });
 
     const diff = createActionPayload(

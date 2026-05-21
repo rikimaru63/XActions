@@ -104,6 +104,14 @@ function auditStaticAcceptance() {
     'data-tab="history"',
   ]);
 
+  const japaneseChoiceFieldMissing = hasAll(catalogAudit + dashboard, [
+    "field.type === 'select'",
+    "field.type === 'multiSelect'",
+    'data-multi-field',
+    'choice field is missing options',
+    'placeholder exposes slash-separated internal values',
+  ]);
+
   const dashboardRouteMissing = hasAll(server + dashboard, [
     "app.get('/dashboard'",
     "res.redirect(302, '/console')",
@@ -353,6 +361,13 @@ function auditStaticAcceptance() {
       detailMissing.length === 0 && uiSmoke.includes('tabStates') && uiSmoke.includes('visitedFeatureTotal'),
       { script: 'smoke:console-ui' },
       detailMissing
+    ),
+    item(
+      'japanese-choice-fields',
+      'Code-like mode and format inputs are rendered as Japanese choices instead of slash-separated values.',
+      japaneseChoiceFieldMissing.length === 0,
+      { ui: 'dashboard/console.html', audit: 'audit:console-catalog' },
+      japaneseChoiceFieldMissing
     ),
     item(
       'dashboard-entrypoint',
