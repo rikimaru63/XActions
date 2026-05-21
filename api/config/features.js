@@ -43,7 +43,7 @@ const features = [
       { key: 'likeCount', label: 'Likeする最新投稿数', type: 'number', min: 0, max: 10, default: 1 },
       { key: 'follow', label: 'フォローする', type: 'boolean', default: false },
       { key: 'dmMessage', label: 'DM本文', type: 'textarea', max: 1000, placeholder: 'DMを送る場合のみ入力' },
-      { key: 'delayMs', label: '実行間隔', type: 'number', min: 2000, max: 60000, step: 500, default: 3000, suffix: 'ms' },
+      { key: 'delaySeconds', label: '実行間隔', type: 'number', min: 2, max: 60, step: 0.5, default: 3, suffix: '秒' },
     ],
   },
   {

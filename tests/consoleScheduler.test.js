@@ -868,13 +868,29 @@ describe('console scheduler helpers', () => {
   });
 
   it('enforces catalog bulk limits in server-side console payloads', () => {
+    const targetFeature = getFeatureById('targetEngage');
+    const delayField = targetFeature.fields.find((field) => field.label === '実行間隔');
+    expect(delayField).toMatchObject({
+      key: 'delaySeconds',
+      min: 2,
+      max: 60,
+      suffix: '秒',
+    });
+
     const targetEngage = createActionPayload(
-      getFeatureById('targetEngage'),
-      { targetUsername: '@target_user', likeCount: 999, delayMs: 1 },
+      targetFeature,
+      { targetUsername: '@target_user', likeCount: 999, delaySeconds: 1 },
       'dryRun'
     );
     expect(targetEngage.operationConfig.likeCount).toBe(numberFieldMax('targetEngage', 'likeCount'));
     expect(targetEngage.operationConfig.delayMs).toBe(2000);
+
+    const legacyDelay = createActionPayload(
+      targetFeature,
+      { targetUsername: '@target_user', likeCount: 1, delayMs: 1 },
+      'dryRun'
+    );
+    expect(legacyDelay.operationConfig.delayMs).toBe(2000);
 
     for (const [featureId, config, key] of [
       ['autoLike', { query: 'xactions', maxLikes: 999 }, 'maxLikes'],

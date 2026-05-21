@@ -92,7 +92,9 @@ function createActionPayload(feature, inputConfig, mode = 'dryRun', user = {}) {
       const likeCount = asNumber(config.likeCount, 0, 0, 10);
       const follow = asBool(config.follow);
       const dmMessage = String(config.dmMessage || '').trim().slice(0, MAX_DM_MESSAGE_LENGTH);
-      const delayMs = asNumber(config.delayMs, 3000, 2000, 60000);
+      const delayMs = typeof config.delaySeconds !== 'undefined'
+        ? Math.round(asNumber(config.delaySeconds, 3, 2, 60) * 1000)
+        : asNumber(config.delayMs, 3000, 2000, 60000);
 
       if (!targetUsername) throw new Error('対象ユーザーを入力してください。');
       if (likeCount === 0 && !follow && !dmMessage) {
