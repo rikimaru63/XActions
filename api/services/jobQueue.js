@@ -33,8 +33,9 @@ import { getBookmarks } from '../../src/bookmarkManager.js';
 import { getTrends } from '../../src/discoveryExplore.js';
 import { exportConversation, getConversations } from '../../src/dmManager.js';
 import { getLiveSpaces, getScheduledSpaces, scrapeSpace } from '../../src/spacesManager.js';
-import { analyzeSentiment, analyzeTweetPriceCorrelation } from '../../src/analytics/index.js';
+import { aggregateResults, analyzeBatch, analyzeSentiment, analyzeTweetPriceCorrelation } from '../../src/analytics/index.js';
 import { DatasetStore, listDatasets } from '../../src/scraping/paginationEngine.js';
+import workflows from '../../src/workflows/index.js';
 import { getDecryptedSessionCookie } from '../routes/session-auth.js';
 import { getAccountForUser, getDecryptedAccountCookie, markAccountSessionExpired } from './accountStore.js';
 import { withAccountExecutionLock } from './accountExecutionLock.js';
@@ -325,6 +326,14 @@ function rowsToCsv(rows = []) {
     headers.join(','),
     ...rows.map((row) => headers.map((header) => escape(row?.[header])).join(',')),
   ].join('\n');
+}
+
+function monitorQuery(type, target) {
+  const cleaned = String(target || '').trim();
+  if (type === 'keyword') return cleaned;
+  const username = cleaned.replace(/^@/, '');
+  if (type === 'replies') return `to:${username}`;
+  return `@${username}`;
 }
 
 async function resolveJobConfig(job) {
@@ -732,6 +741,89 @@ operationsQueue.process('datasets', 1, async (job) => {
     datasets,
     count: datasets.length,
   };
+});
+
+operationsQueue.process('monitorSnapshot', 1, async (job) => {
+  console.log(`🔄 Processing job ${job.id}: monitorSnapshot`);
+
+  const config = await resolveJobConfig(job);
+  const target = String(config.target || '').trim();
+  if (!target) throw new Error('Monitor target is required.');
+
+  const query = monitorQuery(config.monitorType, target);
+  const tweets = await searchTweetsWithCookie(config.sessionCookie, query, {
+    limit: config.limit || 20,
+    filter: 'latest',
+  });
+  const items = Array.isArray(tweets) ? tweets : tweets?.tweets || tweets?.results || [];
+  const texts = items
+    .map((item) => String(item.text || item.content || item.fullText || '').trim())
+    .filter(Boolean);
+  const sentiment = await analyzeBatch(texts, {
+    mode: config.sentimentMode || 'rules',
+  });
+
+  return {
+    target,
+    monitorType: config.monitorType || 'mentions',
+    query,
+    count: items.length,
+    sentiment: aggregateResults(sentiment),
+    items: items.slice(0, config.limit || 20),
+    analyzedAt: new Date().toISOString(),
+  };
+});
+
+operationsQueue.process('runWorkflow', 1, async (job) => {
+  console.log(`🔄 Processing job ${job.id}: runWorkflow`);
+
+  const config = await resolveJobConfig(job);
+  const action = config.action || 'list';
+
+  if (action === 'actions') {
+    return {
+      actions: workflows.listActions(),
+      operators: workflows.getAvailableOperators(),
+    };
+  }
+
+  if (action === 'runs') {
+    return workflows.runs(config.workflowId, config.limit || 20);
+  }
+
+  if (action !== 'run') {
+    const list = await workflows.list();
+    return {
+      workflows: list,
+      count: list.length,
+    };
+  }
+
+  const workflow = await workflows.get(config.workflowId);
+  if (!workflow) throw new Error(`Workflow not found: ${config.workflowId}`);
+
+  if (config.dryRun !== false) {
+    return {
+      dryRun: true,
+      workflow: {
+        id: workflow.id,
+        name: workflow.name,
+        enabled: workflow.enabled !== false,
+        stepsCount: workflow.steps?.length || 0,
+        trigger: workflow.trigger || { type: 'manual' },
+      },
+      contextKeys: Object.keys(config.context || {}),
+    };
+  }
+
+  return workflows.run(workflow, {
+    trigger: 'console',
+    initialContext: config.context || {},
+    authToken: config.sessionCookie,
+    userId: job.data.userId || 'console',
+    isCancelled: () => isJobCancelled(job.data.operationId),
+    onProgress: (event) => Promise.resolve(job.progress(event)).catch(() => {}),
+  });
 });
 
 // Process jobs - posting actions

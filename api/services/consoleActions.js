@@ -522,6 +522,65 @@ function createActionPayload(feature, inputConfig, mode = 'dryRun', user = {}) {
       };
     }
 
+    case 'monitorSnapshot': {
+      const target = String(config.target || '').trim();
+      const requestedType = String(config.monitorType || config.type || 'mentions').trim().toLowerCase();
+      const monitorType = ['mentions', 'keyword', 'replies'].includes(requestedType) ? requestedType : 'mentions';
+      const limit = asNumber(config.limit, 20, 1, 100);
+      const requestedMode = String(config.sentimentMode || 'rules').trim().toLowerCase();
+      const sentimentMode = requestedMode === 'llm' ? 'llm' : 'rules';
+      if (!target) throw new Error('監視対象を入力してください。');
+
+      return {
+        operationType: 'monitorSnapshot',
+        operationConfig: {
+          sourceFeatureId: feature.id,
+          target,
+          monitorType,
+          limit,
+          sentimentMode,
+          dryRun: true,
+        },
+        jobConfig: {
+          target,
+          monitorType,
+          limit,
+          sentimentMode,
+          dryRun: true,
+        },
+      };
+    }
+
+    case 'runWorkflow': {
+      const requestedAction = String(config.action || 'list').trim().toLowerCase();
+      const action = ['list', 'actions', 'run', 'runs'].includes(requestedAction) ? requestedAction : 'list';
+      const workflowId = String(config.workflowId || '').trim();
+      const context = parseJson(config.context) || {};
+      const limit = asNumber(config.limit, 20, 1, 100);
+      if ((action === 'run' || action === 'runs') && !workflowId) {
+        throw new Error('ワークフローIDを入力してください。');
+      }
+
+      return {
+        operationType: 'runWorkflow',
+        operationConfig: {
+          sourceFeatureId: feature.id,
+          action,
+          workflowId,
+          hasContext: Object.keys(context).length > 0,
+          limit,
+          dryRun,
+        },
+        jobConfig: {
+          action,
+          workflowId,
+          context,
+          limit,
+          dryRun,
+        },
+      };
+    }
+
     case 'extractVideo': {
       const tweetUrl = String(config.tweetUrl || '').trim();
       if (!tweetUrl) throw new Error('投稿URLを入力してください。');

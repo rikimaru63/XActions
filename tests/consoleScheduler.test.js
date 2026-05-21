@@ -340,6 +340,79 @@ describe('console scheduler helpers', () => {
     });
   });
 
+  it('connects monitor and workflow automation actions to the console catalog', () => {
+    expect(getFeatureById('monitor')).toMatchObject({
+      status: 'available',
+      consoleAction: 'monitorSnapshot',
+      operationType: 'monitorSnapshot',
+      supportsDryRun: true,
+      supportsSchedule: true,
+    });
+    expect(getFeatureById('workflows')).toMatchObject({
+      status: 'available',
+      consoleAction: 'runWorkflow',
+      operationType: 'runWorkflow',
+      supportsDryRun: true,
+      supportsSchedule: true,
+    });
+  });
+
+  it('builds payloads for monitor and workflow automation actions', () => {
+    const monitor = createActionPayload(
+      getFeatureById('monitor'),
+      { target: '@source_user', monitorType: 'replies', limit: 12, sentimentMode: 'rules' },
+      'dryRun'
+    );
+    expect(monitor).toMatchObject({
+      operationType: 'monitorSnapshot',
+      operationConfig: {
+        sourceFeatureId: 'monitor',
+        target: '@source_user',
+        monitorType: 'replies',
+        limit: 12,
+        sentimentMode: 'rules',
+        dryRun: true,
+      },
+      jobConfig: {
+        target: '@source_user',
+        monitorType: 'replies',
+        limit: 12,
+        sentimentMode: 'rules',
+        dryRun: true,
+      },
+    });
+
+    const workflowPreview = createActionPayload(
+      getFeatureById('workflows'),
+      { action: 'run', workflowId: 'wf_1', context: '{"keyword":"xactions"}' },
+      'dryRun'
+    );
+    expect(workflowPreview).toMatchObject({
+      operationType: 'runWorkflow',
+      operationConfig: {
+        sourceFeatureId: 'workflows',
+        action: 'run',
+        workflowId: 'wf_1',
+        hasContext: true,
+        dryRun: true,
+      },
+      jobConfig: {
+        action: 'run',
+        workflowId: 'wf_1',
+        context: { keyword: 'xactions' },
+        dryRun: true,
+      },
+    });
+
+    const workflowRun = createActionPayload(
+      getFeatureById('workflows'),
+      { action: 'run', workflowId: 'wf_1' },
+      'live'
+    );
+    expect(workflowRun.operationConfig.dryRun).toBe(false);
+    expect(workflowRun.jobConfig.dryRun).toBe(false);
+  });
+
   it('connects posting actions without storing full post text in operation config', () => {
     for (const id of ['postTweet', 'postThread', 'createPoll', 'schedulePost']) {
       expect(getFeatureById(id)).toMatchObject({
