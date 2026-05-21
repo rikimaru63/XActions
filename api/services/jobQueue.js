@@ -1245,7 +1245,7 @@ operationsQueue.process('unrollThread', 1, async (job) => {
 operationsQueue.process('analyzeSentiment', 2, async (job) => {
   console.log(`🔄 Processing job ${job.id}: analyzeSentiment`);
 
-  const config = job.data.config || {};
+  const config = restoreQueueJobConfig(job.data);
   return analyzeSentiment(config.text, { mode: config.mode || 'rules' });
 });
 
@@ -1319,7 +1319,7 @@ operationsQueue.process('analyticsReport', 1, async (job) => {
 operationsQueue.process('priceCorrelation', 1, async (job) => {
   console.log(`🔄 Processing job ${job.id}: priceCorrelation`);
 
-  const config = job.data.config || {};
+  const config = restoreQueueJobConfig(job.data);
   return analyzeTweetPriceCorrelation({
     tweets: config.tweets || [],
     tokenId: config.tokenId,

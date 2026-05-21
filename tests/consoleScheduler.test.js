@@ -320,7 +320,14 @@ describe('console scheduler helpers', () => {
     expect(JSON.stringify(jobData)).not.toContain('secret');
   });
 
-  it('encrypts DM bodies before they reach Bull job data', () => {
+  it('encrypts user-authored bodies before they reach Bull job data', () => {
+    const expectEncryptedConfigField = (jobData, field, secret) => {
+      expect(jobData.config[field]).toBeUndefined();
+      expect(jobData.encryptedJobConfig).toBeTruthy();
+      expect(JSON.stringify(jobData)).not.toContain(secret);
+      expect(restoreQueueJobConfig(jobData)[field]).toEqual(secret);
+    };
+
     const sendDmJobData = sanitizeQueueJobData({
       type: 'sendDM',
       operationId: 'op_dm',
@@ -362,6 +369,66 @@ describe('console scheduler helpers', () => {
     expect(targetEngageJobData.config.dmMessage).toBeUndefined();
     expect(JSON.stringify(targetEngageJobData)).not.toContain('private target dm');
     expect(restoreQueueJobConfig(targetEngageJobData).dmMessage).toBe('private target dm');
+
+    expectEncryptedConfigField(sanitizeQueueJobData({
+      type: 'postTweet',
+      operationId: 'op_post',
+      userId: 'user_1',
+      accountId: 'account_1',
+      config: { text: 'private post body', dryRun: true },
+    }), 'text', 'private post body');
+
+    expectEncryptedConfigField(sanitizeQueueJobData({
+      type: 'replyToTweet',
+      operationId: 'op_reply',
+      userId: 'user_1',
+      accountId: 'account_1',
+      config: { tweetId: '123', text: 'private reply body' },
+    }), 'text', 'private reply body');
+
+    expectEncryptedConfigField(sanitizeQueueJobData({
+      type: 'autoComment',
+      operationId: 'op_comment',
+      userId: 'user_1',
+      accountId: 'account_1',
+      config: { query: 'xactions', comment: 'private comment body', dryRun: false },
+    }), 'comment', 'private comment body');
+
+    const pollJobData = sanitizeQueueJobData({
+      type: 'createPoll',
+      operationId: 'op_poll',
+      userId: 'user_1',
+      accountId: 'account_1',
+      config: {
+        question: 'private poll question',
+        options: ['private poll option a', 'private poll option b'],
+      },
+    });
+
+    expect(pollJobData.config.question).toBeUndefined();
+    expect(pollJobData.config.options).toBeUndefined();
+    expect(JSON.stringify(pollJobData)).not.toContain('private poll question');
+    expect(JSON.stringify(pollJobData)).not.toContain('private poll option a');
+    expect(restoreQueueJobConfig(pollJobData)).toMatchObject({
+      question: 'private poll question',
+      options: ['private poll option a', 'private poll option b'],
+    });
+
+    const workflowJobData = sanitizeQueueJobData({
+      type: 'runWorkflow',
+      operationId: 'op_workflow',
+      userId: 'user_1',
+      accountId: 'account_1',
+      config: {
+        action: 'run',
+        workflowId: 'workflow_1',
+        context: { prompt: 'private workflow context' },
+      },
+    });
+
+    expect(workflowJobData.config.context).toBeUndefined();
+    expect(JSON.stringify(workflowJobData)).not.toContain('private workflow context');
+    expect(restoreQueueJobConfig(workflowJobData).context).toEqual({ prompt: 'private workflow context' });
   });
 
   it('keeps full DM text out of the legacy messages history config', () => {

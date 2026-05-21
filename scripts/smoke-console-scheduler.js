@@ -960,6 +960,9 @@ function findSensitiveJobDataLeaks(value, path = 'job.data') {
     if (value.includes(`auth_token=${smokeId}`) || value.includes(`ct0=${smokeId}`)) {
       leaks.push(`${path}: contains raw smoke session cookie`);
     }
+    if (value.includes(smokeId)) {
+      leaks.push(`${path}: contains smoke body marker`);
+    }
     return leaks;
   }
 

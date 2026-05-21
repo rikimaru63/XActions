@@ -13,6 +13,15 @@ const sensitiveQueueKeys = new Set([
 ]);
 
 const encryptedConfigKeysByType = new Map([
+  ['agentCommand', ['text']],
+  ['analyzeSentiment', ['text']],
+  ['autoComment', ['comment']],
+  ['createPoll', ['question', 'options']],
+  ['postThread', ['tweets']],
+  ['postTweet', ['text']],
+  ['priceCorrelation', ['tweets']],
+  ['replyToTweet', ['text']],
+  ['runWorkflow', ['context']],
   ['sendDM', ['message']],
   ['targetEngage', ['dmMessage']],
 ]);
