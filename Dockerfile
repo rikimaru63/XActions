@@ -9,6 +9,14 @@ FROM node:20-slim AS deps
 
 WORKDIR /app
 
+# Native modules such as better-sqlite3 need a local build fallback when
+# prebuilt binaries cannot be fetched during no-cache deployments.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    python3 \
+    make \
+    g++ \
+    && rm -rf /var/lib/apt/lists/*
+
 # Copy package files
 COPY package.json package-lock.json* ./
 COPY prisma ./prisma/
