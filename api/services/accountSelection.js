@@ -21,8 +21,28 @@ function assertAccountSelectionLimit(accountIds = []) {
   }
 }
 
+function operationAccountHistoryWhere(accountIds = []) {
+  const uniqueAccountIds = [...new Set(accountIds
+    .map((accountId) => String(accountId || '').trim())
+    .filter(Boolean))];
+
+  if (!uniqueAccountIds.length) return {};
+
+  const accountId = uniqueAccountIds.length === 1
+    ? uniqueAccountIds[0]
+    : { in: uniqueAccountIds };
+
+  return {
+    OR: [
+      { accountId },
+      { childOperations: { some: { accountId } } },
+    ],
+  };
+}
+
 export {
   MAX_ACCOUNT_SELECTION,
   assertAccountSelectionLimit,
   explicitAccountIdsFromBody,
+  operationAccountHistoryWhere,
 };

@@ -6,6 +6,7 @@ import {
   assertAccountSelectionLimit,
   explicitAccountIdsFromBody,
   MAX_ACCOUNT_SELECTION,
+  operationAccountHistoryWhere,
 } from '../api/services/accountSelection.js';
 import {
   accountPauseMessage,
@@ -150,6 +151,22 @@ describe('console scheduler helpers', () => {
     expect(() => assertAccountSelectionLimit(['acc_1', 'acc_2', 'acc_3'])).toThrow(
       `一度に選べるXアカウントは${MAX_ACCOUNT_SELECTION}件までです。`
     );
+  });
+
+  it('keeps batch parent operations visible when filtering history by account', () => {
+    expect(operationAccountHistoryWhere(['acc_1'])).toEqual({
+      OR: [
+        { accountId: 'acc_1' },
+        { childOperations: { some: { accountId: 'acc_1' } } },
+      ],
+    });
+
+    expect(operationAccountHistoryWhere(['acc_1', 'acc_2'])).toEqual({
+      OR: [
+        { accountId: { in: ['acc_1', 'acc_2'] } },
+        { childOperations: { some: { accountId: { in: ['acc_1', 'acc_2'] } } } },
+      ],
+    });
   });
 
   it('stores batch retry inputs encrypted and hides them from history output', () => {

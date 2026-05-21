@@ -17,6 +17,7 @@ import { listAccountsForUser } from '../services/accountStore.js';
 import {
   assertAccountSelectionLimit,
   explicitAccountIdsFromBody,
+  operationAccountHistoryWhere,
 } from '../services/accountSelection.js';
 import {
   buildEncryptedRetryConfig,
@@ -222,7 +223,7 @@ router.get('/history', async (req, res) => {
       if (allowedIds.length !== new Set(requestedAccountIds).size) {
         return res.status(400).json({ error: '選択したXアカウントが見つかりません。' });
       }
-      where.accountId = allowedIds.length === 1 ? allowedIds[0] : { in: allowedIds };
+      Object.assign(where, operationAccountHistoryWhere(allowedIds));
     }
 
     const operations = await prisma.operation.findMany({
