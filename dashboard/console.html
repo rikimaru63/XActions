@@ -151,6 +151,69 @@
       min-height: 86px;
     }
 
+    .account-management,
+    .account-manage-list {
+      display: grid;
+      gap: 12px;
+    }
+
+    .account-card {
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      padding: 12px;
+      background: var(--surface);
+      display: grid;
+      gap: 10px;
+    }
+
+    .account-card-top {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      align-items: flex-start;
+    }
+
+    .account-card-title {
+      min-width: 0;
+    }
+
+    .account-card-title strong {
+      display: block;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font-size: 15px;
+    }
+
+    .account-actions {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .account-actions button,
+    .inline-form button {
+      min-height: 34px;
+      border-radius: 999px;
+      border: 1px solid var(--line);
+      background: var(--bg);
+      color: var(--text);
+      padding: 0 12px;
+      cursor: pointer;
+      font-weight: 700;
+    }
+
+    .account-actions .danger {
+      color: #ff818a;
+      border-color: rgba(244, 33, 46, 0.45);
+      background: rgba(244, 33, 46, 0.08);
+    }
+
+    .inline-form {
+      display: grid;
+      gap: 8px;
+    }
+
     .account-tools {
       display: flex;
       justify-content: space-between;
@@ -322,6 +385,7 @@
     .badge.available { color: var(--green); border-color: rgba(0, 186, 124, 0.5); }
     .badge.legacy { color: var(--yellow); border-color: rgba(255, 184, 77, 0.5); }
     .badge.high { color: #ff818a; border-color: rgba(244, 33, 46, 0.45); }
+    .badge.disabled { color: var(--muted); border-color: var(--line); }
 
     .detail {
       height: 100vh;
@@ -611,7 +675,7 @@
         </div>
         <form class="account-form hidden" id="account-form">
           <input id="new-account-username" autocomplete="off" placeholder="@username">
-          <textarea id="new-account-cookie" placeholder="session cookie"></textarea>
+          <textarea id="new-account-cookie" placeholder="X連携情報を貼り付け"></textarea>
           <label class="check">
             <span>デフォルトにする</span>
             <input id="new-account-default" type="checkbox">
@@ -704,6 +768,11 @@
       })[char]);
     }
 
+    function selectorValue(value) {
+      if (window.CSS?.escape) return CSS.escape(String(value));
+      return String(value).replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+    }
+
     function feature() {
       return state.catalog?.features.find((item) => item.id === state.selectedFeatureId) || null;
     }
@@ -719,6 +788,15 @@
         failed: '失敗',
         cancelled: '停止',
       }[status] || status || '-';
+    }
+
+    function accountStatusClass(status) {
+      return {
+        active: 'available',
+        expired: 'high',
+        error: 'high',
+        disabled: 'disabled',
+      }[status] || '';
     }
 
     function timeText(value) {
@@ -839,6 +917,104 @@
           state.selectedAccountIds = [...els.accountList.querySelectorAll('input[type="checkbox"]:checked')].map((item) => item.value);
           renderDetail();
         });
+      });
+    }
+
+    function accountActivityText(account) {
+      const parts = [];
+      if (account.lastVerifiedAt) parts.push(`確認 ${timeText(account.lastVerifiedAt)}`);
+      if (account.lastUsedAt) parts.push(`使用 ${timeText(account.lastUsedAt)}`);
+      if (account.error) parts.push(account.error);
+      return parts.join(' / ') || 'まだ実行履歴はありません';
+    }
+
+    function renderAccountManagement() {
+      const addForm = `
+        <form class="account-form" id="account-manage-form">
+          <div class="field">
+            <label for="account-manage-username">Xユーザー名</label>
+            <input id="account-manage-username" autocomplete="off" placeholder="@username">
+          </div>
+          <div class="field">
+            <label for="account-manage-cookie">X連携情報</label>
+            <textarea id="account-manage-cookie" placeholder="ブラウザから取得したX連携情報を貼り付け"></textarea>
+          </div>
+          <label class="check">
+            <span>デフォルトにする</span>
+            <input id="account-manage-default" type="checkbox">
+          </label>
+          <button type="submit" class="secondary">追加する</button>
+        </form>
+      `;
+
+      const accountList = state.accounts.length
+        ? state.accounts.map((account) => `
+          <div class="account-card" data-account-card="${escapeHtml(account.id)}">
+            <div class="account-card-top">
+              <div class="account-card-title">
+                <strong>@${escapeHtml(account.username)}</strong>
+                <div class="history-meta">${escapeHtml(account.displayName || account.username)}</div>
+              </div>
+              <span class="badge ${accountStatusClass(account.status)}">${escapeHtml(account.statusLabel)}</span>
+            </div>
+            <div class="history-meta">${escapeHtml(account.isDefault ? 'デフォルト / ' : '')}${escapeHtml(accountActivityText(account))}</div>
+            <div class="account-actions">
+              <button type="button" data-account-default="${escapeHtml(account.id)}" ${account.isDefault ? 'disabled' : ''}>デフォルト</button>
+              <button type="button" data-account-verify="${escapeHtml(account.id)}">確認</button>
+              <button type="button" data-account-toggle="${escapeHtml(account.id)}" data-status="${escapeHtml(account.status)}">${account.status === 'disabled' ? '再開' : '停止'}</button>
+              <button type="button" data-account-cookie-toggle="${escapeHtml(account.id)}">連携情報</button>
+              <button type="button" class="danger" data-account-delete="${escapeHtml(account.id)}">削除</button>
+            </div>
+            <form class="inline-form hidden" data-account-cookie-form="${escapeHtml(account.id)}">
+              <textarea data-account-cookie-value="${escapeHtml(account.id)}" placeholder="新しいX連携情報を貼り付け"></textarea>
+              <button type="submit">更新する</button>
+            </form>
+          </div>
+        `).join('')
+        : '<div class="empty">まだXアカウントが登録されていません。</div>';
+
+      els.settingsPanel.innerHTML = `
+        <div class="account-management">
+          ${addForm}
+          <div class="status"></div>
+          <div class="account-manage-list">${accountList}</div>
+        </div>
+      `;
+
+      document.getElementById('account-manage-form').addEventListener('submit', async (event) => {
+        event.preventDefault();
+        await addAccount({
+          username: document.getElementById('account-manage-username').value,
+          sessionCookie: document.getElementById('account-manage-cookie').value,
+          isDefault: document.getElementById('account-manage-default').checked,
+        }, els.settingsPanel);
+      });
+
+      els.settingsPanel.querySelectorAll('[data-account-default]').forEach((button) => {
+        button.addEventListener('click', () => setAccountDefault(button.dataset.accountDefault));
+      });
+      els.settingsPanel.querySelectorAll('[data-account-verify]').forEach((button) => {
+        button.addEventListener('click', () => verifyAccount(button.dataset.accountVerify));
+      });
+      els.settingsPanel.querySelectorAll('[data-account-toggle]').forEach((button) => {
+        button.addEventListener('click', () => toggleAccountStatus(button.dataset.accountToggle, button.dataset.status));
+      });
+      els.settingsPanel.querySelectorAll('[data-account-cookie-toggle]').forEach((button) => {
+        button.addEventListener('click', () => {
+          const form = els.settingsPanel.querySelector(`[data-account-cookie-form="${selectorValue(button.dataset.accountCookieToggle)}"]`);
+          form?.classList.toggle('hidden');
+        });
+      });
+      els.settingsPanel.querySelectorAll('[data-account-cookie-form]').forEach((form) => {
+        form.addEventListener('submit', async (event) => {
+          event.preventDefault();
+          const accountId = form.dataset.accountCookieForm;
+          const textarea = form.querySelector(`[data-account-cookie-value="${selectorValue(accountId)}"]`);
+          await updateAccountCookie(accountId, textarea.value);
+        });
+      });
+      els.settingsPanel.querySelectorAll('[data-account-delete]').forEach((button) => {
+        button.addEventListener('click', () => deleteAccount(button.dataset.accountDelete));
       });
     }
 
@@ -973,6 +1149,11 @@
     }
 
     function renderSettings(selected) {
+      if (selected.id === 'accounts') {
+        renderAccountManagement();
+        return;
+      }
+
       if (selected.status !== 'available') {
         const target = selected.page || selected.endpoint || '';
         els.settingsPanel.innerHTML = `
@@ -1261,6 +1442,93 @@
       syncSelectedAccounts();
     }
 
+    async function addAccount(payload, target) {
+      setStatus(target, '保存中');
+
+      try {
+        await apiRequest('/accounts', {
+          method: 'POST',
+          body: JSON.stringify(payload),
+        });
+        await loadAccounts();
+        render();
+        setStatus(target, '保存しました。', 'ok');
+      } catch (error) {
+        setStatus(target, error.message, 'err');
+      }
+    }
+
+    async function setAccountDefault(accountId) {
+      try {
+        await apiRequest(`/accounts/${encodeURIComponent(accountId)}/default`, { method: 'POST' });
+        await loadAccounts();
+        render();
+        setStatus(els.settingsPanel, 'デフォルトを更新しました。', 'ok');
+      } catch (error) {
+        setStatus(els.settingsPanel, error.message, 'err');
+      }
+    }
+
+    async function verifyAccount(accountId) {
+      setStatus(els.settingsPanel, '確認中');
+      try {
+        const result = await apiRequest(`/accounts/${encodeURIComponent(accountId)}/verify`, { method: 'POST' });
+        await loadAccounts();
+        render();
+        setStatus(els.settingsPanel, result.verified ? 'ログイン状態を確認しました。' : 'ログイン状態を確認できませんでした。', result.verified ? 'ok' : 'err');
+      } catch (error) {
+        setStatus(els.settingsPanel, error.message, 'err');
+      }
+    }
+
+    async function toggleAccountStatus(accountId, currentStatus) {
+      const nextStatus = currentStatus === 'disabled' ? 'active' : 'disabled';
+      try {
+        await apiRequest(`/accounts/${encodeURIComponent(accountId)}`, {
+          method: 'PATCH',
+          body: JSON.stringify({ status: nextStatus }),
+        });
+        await loadAccounts();
+        render();
+        setStatus(els.settingsPanel, nextStatus === 'disabled' ? '停止しました。' : '再開しました。', 'ok');
+      } catch (error) {
+        setStatus(els.settingsPanel, error.message, 'err');
+      }
+    }
+
+    async function updateAccountCookie(accountId, sessionCookie) {
+      if (!String(sessionCookie || '').trim()) {
+        setStatus(els.settingsPanel, 'X連携情報を入力してください。', 'err');
+        return;
+      }
+
+      setStatus(els.settingsPanel, '更新中');
+      try {
+        await apiRequest(`/accounts/${encodeURIComponent(accountId)}`, {
+          method: 'PATCH',
+          body: JSON.stringify({ sessionCookie }),
+        });
+        await loadAccounts();
+        render();
+        setStatus(els.settingsPanel, '連携情報を更新しました。', 'ok');
+      } catch (error) {
+        setStatus(els.settingsPanel, error.message, 'err');
+      }
+    }
+
+    async function deleteAccount(accountId) {
+      const ok = window.confirm('このXアカウントを削除しますか？有効な予約は停止されます。');
+      if (!ok) return;
+      try {
+        await apiRequest(`/accounts/${encodeURIComponent(accountId)}`, { method: 'DELETE' });
+        await loadAccounts();
+        render();
+        setStatus(els.settingsPanel, '削除しました。', 'ok');
+      } catch (error) {
+        setStatus(els.settingsPanel, error.message, 'err');
+      }
+    }
+
     async function init() {
       if (!localStorage.getItem('authToken')) {
         window.location.href = '/login';
@@ -1296,25 +1564,16 @@
 
     els.accountForm.addEventListener('submit', async (event) => {
       event.preventDefault();
-      setStatus(els.accountForm, '保存中');
+      await addAccount({
+        username: els.newAccountUsername.value,
+        sessionCookie: els.newAccountCookie.value,
+        isDefault: els.newAccountDefault.checked,
+      }, els.accountForm);
 
-      try {
-        await apiRequest('/accounts', {
-          method: 'POST',
-          body: JSON.stringify({
-            username: els.newAccountUsername.value,
-            sessionCookie: els.newAccountCookie.value,
-            isDefault: els.newAccountDefault.checked,
-          }),
-        });
+      if (els.accountForm.querySelector('.status').classList.contains('ok')) {
         els.newAccountUsername.value = '';
         els.newAccountCookie.value = '';
         els.newAccountDefault.checked = false;
-        setStatus(els.accountForm, '保存しました。', 'ok');
-        await loadAccounts();
-        render();
-      } catch (error) {
-        setStatus(els.accountForm, error.message, 'err');
       }
     });
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { getFeatureById } from '../api/config/features.js';
+import { getFeatureById, getPublicFeatureCatalog } from '../api/config/features.js';
 import { createActionPayload } from '../api/services/consoleActions.js';
 import { calculateNextRunAt } from '../api/services/scheduleUtils.js';
 
@@ -37,5 +37,17 @@ describe('console scheduler helpers', () => {
     });
     expect(payload.operationConfig.dmMessage).toBeUndefined();
     expect(payload.jobConfig.dmMessage).toBe('hello');
+  });
+
+  it('exposes X account management inside the console catalog', () => {
+    const catalog = getPublicFeatureCatalog();
+    const accounts = catalog.features.find((item) => item.id === 'accounts');
+
+    expect(accounts).toMatchObject({
+      category: 'settings',
+      title: 'X連携',
+      status: 'available',
+      statusLabel: '利用可能',
+    });
   });
 });

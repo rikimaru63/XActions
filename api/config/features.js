@@ -475,7 +475,7 @@ const features = [
     supportsDryRun: false,
     supportsSchedule: false,
     riskLevel: 'medium',
-    status: 'legacy',
+    status: 'available',
     page: '/console',
     endpoint: '/api/accounts',
   },

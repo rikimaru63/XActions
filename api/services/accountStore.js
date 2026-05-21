@@ -172,7 +172,7 @@ async function upsertAccountForUser(user, input) {
   const username = normalizeUsername(input.username);
   const sessionCookie = String(input.sessionCookie || '').trim();
   if (!username) throw new Error('Xユーザー名を入力してください。');
-  if (!sessionCookie && !input.encryptedCookie) throw new Error('session cookie を入力してください。');
+  if (!sessionCookie && !input.encryptedCookie) throw new Error('X連携情報を入力してください。');
 
   const encryptedCookie = input.encryptedCookie || encrypt(sessionCookie);
   const shouldDefault = input.isDefault === true || input.isDefault === 'true';

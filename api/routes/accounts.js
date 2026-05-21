@@ -34,13 +34,13 @@ router.post('/', async (req, res) => {
     const skipVerify = process.env.NODE_ENV !== 'production'
       && (req.body.skipVerify === true || req.body.skipVerify === 'true');
     if (!sessionCookie) {
-      return res.status(400).json({ error: 'session cookie を入力してください。' });
+      return res.status(400).json({ error: 'X連携情報を入力してください。' });
     }
 
     if (!skipVerify) {
       const ok = await verifySessionCookie(sessionCookie);
       if (!ok) {
-        return res.status(401).json({ error: 'session cookie でXにログインできませんでした。' });
+        return res.status(401).json({ error: 'X連携情報でログイン状態を確認できませんでした。' });
       }
     }
 
@@ -70,7 +70,7 @@ router.post('/:id/verify', async (req, res) => {
 
     const cookie = req.body.sessionCookie ? String(req.body.sessionCookie).trim() : null;
     const sessionCookie = cookie || decrypt(account.encryptedCookie);
-    if (!sessionCookie) return res.status(400).json({ error: '保存済み cookie を復号できませんでした。' });
+    if (!sessionCookie) return res.status(400).json({ error: '保存済みのX連携情報を読み取れませんでした。' });
     const ok = await verifySessionCookie(sessionCookie);
 
     const updated = await prisma.xAccount.update({
@@ -106,7 +106,7 @@ router.patch('/:id', async (req, res) => {
     if (['active', 'expired', 'error', 'disabled'].includes(req.body.status)) data.status = req.body.status;
     if (typeof req.body.sessionCookie === 'string' && req.body.sessionCookie.trim()) {
       const ok = await verifySessionCookie(req.body.sessionCookie.trim());
-      if (!ok) return res.status(401).json({ error: 'session cookie でXにログインできませんでした。' });
+      if (!ok) return res.status(401).json({ error: 'X連携情報でログイン状態を確認できませんでした。' });
       data.encryptedCookie = encrypt(req.body.sessionCookie.trim());
       data.status = 'active';
       data.lastVerifiedAt = new Date();
