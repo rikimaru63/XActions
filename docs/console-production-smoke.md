@@ -9,6 +9,7 @@ This smoke checks the production items from `docs/console-scheduler-multiaccount
 - `/api/accounts`
 - `/api/console/features`
 - `/api/scheduled-actions`
+- hidden account/session secrets in authenticated account and schedule responses
 - headless Puppeteer / browserAutomation launch
 - worker container running
 - scheduler startup log

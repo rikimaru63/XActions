@@ -96,6 +96,24 @@ async function requestJson(path, token) {
   return body;
 }
 
+function assertNoRawSensitiveFields(value, label, sensitiveKeys, path = label) {
+  if (!value || typeof value !== 'object') return;
+
+  if (Array.isArray(value)) {
+    value.forEach((item, index) => assertNoRawSensitiveFields(item, label, sensitiveKeys, `${path}[${index}]`));
+    return;
+  }
+
+  for (const [key, item] of Object.entries(value)) {
+    const itemPath = `${path}.${key}`;
+    if (sensitiveKeys.has(key)) {
+      const redacted = item == null || item === '' || item === '[hidden]' || item === '[redacted]';
+      assert(redacted, `${label} leaked raw sensitive field: ${itemPath}`);
+    }
+    assertNoRawSensitiveFields(item, label, sensitiveKeys, itemPath);
+  }
+}
+
 try {
   assert(process.env.JWT_SECRET, 'JWT_SECRET is required inside the API container.');
   const user = await prisma.user.findUnique({
@@ -107,6 +125,17 @@ try {
 
   const accounts = await requestJson('/api/accounts', token);
   assert(Array.isArray(accounts.accounts), '/api/accounts did not return accounts[].');
+  assertNoRawSensitiveFields(accounts, '/api/accounts', new Set([
+    'encryptedCookie',
+    'sessionCookie',
+    'cookie',
+    'cookies',
+    'authToken',
+    'accessToken',
+    'refreshToken',
+    'password',
+    'secret',
+  ]));
 
   const features = await requestJson('/api/console/features', token);
   assert(Array.isArray(features.categories), '/api/console/features did not return categories[].');
@@ -116,6 +145,17 @@ try {
   const schedules = await requestJson('/api/scheduled-actions?limit=5', token);
   const scheduleItems = schedules.scheduledActions || schedules.schedules;
   assert(Array.isArray(scheduleItems), '/api/scheduled-actions did not return schedules[].');
+  assertNoRawSensitiveFields(schedules, '/api/scheduled-actions', new Set([
+    'encryptedCookie',
+    'sessionCookie',
+    'cookie',
+    'cookies',
+    'authToken',
+    'accessToken',
+    'refreshToken',
+    'password',
+    'secret',
+  ]));
 
   console.log(JSON.stringify({
     ok: true,
@@ -125,6 +165,7 @@ try {
       features: features.features.length,
       scheduledActions: scheduleItems.length,
     },
+    sensitiveFieldsHidden: true,
   }, null, 2));
 } finally {
   await prisma.$disconnect();
