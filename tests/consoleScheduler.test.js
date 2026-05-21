@@ -31,6 +31,11 @@ import {
   publicScheduledActionRun,
 } from '../api/services/scheduledActions.js';
 import { calculateNextRunAt } from '../api/services/scheduleUtils.js';
+import {
+  evaluateLiveReadiness,
+  parseLiveReadinessEnv,
+  shouldUseExistingAccounts as shouldUseLiveExistingAccounts,
+} from '../scripts/lib/consoleLiveReadiness.js';
 
 describe('console scheduler helpers', () => {
   it('keeps console status labels aligned with the Japanese UI spec', () => {
@@ -73,6 +78,75 @@ describe('console scheduler helpers', () => {
     expect(html).toContain("title: '再実行の確認'");
     expect(html).toContain("title: 'Xアカウントを削除'");
     expect(html).not.toContain('window.confirm');
+  });
+
+  it('parses live readonly account selectors consistently', () => {
+    const env = {
+      XACTIONS_LIVE_ACCOUNT_IDS: 'acc_1, acc_2, acc_1',
+      XACTIONS_LIVE_ACCOUNT_A_ID: 'acc_2',
+      XACTIONS_LIVE_ACCOUNT_B_ID: 'acc_3',
+      XACTIONS_LIVE_ACCOUNT_USERNAMES: '@Primary, SECONDARY',
+      XACTIONS_LIVE_ACCOUNT_A_USERNAME: 'secondary',
+      XACTIONS_LIVE_ACCOUNT_B_USERNAME: '@Third',
+    };
+
+    const parsed = parseLiveReadinessEnv(env);
+
+    expect(parsed.requestedIds).toEqual(['acc_1', 'acc_2', 'acc_3']);
+    expect(parsed.requestedUsernames).toEqual(['primary', 'secondary', 'third']);
+    expect(parsed.selectorCount).toBe(2);
+    expect(shouldUseLiveExistingAccounts(env)).toBe(true);
+  });
+
+  it('accepts live readonly only with distinct cookies or one valid existing-account selector', () => {
+    const user = { id: 'user_1' };
+    const activeAccounts = [
+      { id: 'acc_1', username: 'primary', isDefault: true, lastVerifiedAt: new Date() },
+      { id: 'acc_2', username: 'secondary', isDefault: false, lastVerifiedAt: new Date() },
+    ];
+
+    expect(evaluateLiveReadiness({
+      env: {
+        XACTIONS_LIVE_ACCOUNT_A_COOKIE: 'auth_token=a',
+        XACTIONS_LIVE_ACCOUNT_B_COOKIE: 'auth_token=b',
+      },
+      user,
+      activeAccounts: [],
+      smokeUsername: 'smoke',
+    }).ready).toBe(true);
+
+    const duplicateCookies = evaluateLiveReadiness({
+      env: {
+        XACTIONS_LIVE_ACCOUNT_A_COOKIE: 'auth_token=a',
+        XACTIONS_LIVE_ACCOUNT_B_COOKIE: 'auth_token=a',
+      },
+      user,
+      activeAccounts,
+      smokeUsername: 'smoke',
+    });
+    expect(duplicateCookies.ready).toBe(false);
+    expect(duplicateCookies.reasons.join(' ')).toContain('must be different');
+
+    const byIds = evaluateLiveReadiness({
+      env: { XACTIONS_LIVE_ACCOUNT_IDS: 'acc_1,acc_2' },
+      user,
+      activeAccounts,
+      smokeUsername: 'smoke',
+    });
+    expect(byIds.ready).toBe(true);
+    expect(byIds.readyWithExistingAccounts).toBe(true);
+
+    const mixedSelectors = evaluateLiveReadiness({
+      env: {
+        XACTIONS_LIVE_ACCOUNT_IDS: 'acc_1,acc_2',
+        XACTIONS_LIVE_USE_EXISTING_ACCOUNTS: 'true',
+      },
+      user,
+      activeAccounts,
+      smokeUsername: 'smoke',
+    });
+    expect(mixedSelectors.ready).toBe(false);
+    expect(mixedSelectors.reasons.join(' ')).toContain('Use only one existing-account selector');
   });
 
   it('shows skipped run-now results and opens the run history', () => {

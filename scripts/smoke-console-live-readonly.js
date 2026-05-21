@@ -2,6 +2,12 @@ import 'dotenv/config';
 import { randomUUID } from 'crypto';
 import jwt from 'jsonwebtoken';
 import { PrismaClient } from '@prisma/client';
+import {
+  envBool,
+  evaluateLiveReadiness,
+  parseLiveReadinessEnv,
+  shouldUseExistingAccounts as shouldUseExistingAccountsFromEnv,
+} from './lib/consoleLiveReadiness.js';
 
 const prisma = new PrismaClient();
 
@@ -12,54 +18,21 @@ const smokeToken = process.env.XACTIONS_SMOKE_TOKEN || '';
 const profileTarget = String(process.env.XACTIONS_LIVE_PROFILE_TARGET || 'x').replace(/^@/, '').trim();
 const smokeId = `live_${Date.now()}_${randomUUID().slice(0, 8)}`;
 const accountPrefix = 'smoke_live_readonly_';
-const diagnoseOnly = envBool('XACTIONS_LIVE_READONLY_DIAGNOSE')
+const diagnoseOnly = envBool(process.env, 'XACTIONS_LIVE_READONLY_DIAGNOSE')
   || process.argv.includes('--diagnose')
   || process.argv.includes('diagnose');
-
-const liveCookies = [
-  process.env.XACTIONS_LIVE_ACCOUNT_A_COOKIE,
-  process.env.XACTIONS_LIVE_ACCOUNT_B_COOKIE,
-].map((value) => String(value || '').trim());
-
-function envList(name) {
-  return String(process.env[name] || '')
-    .split(',')
-    .map((value) => String(value || '').trim())
-    .filter(Boolean);
-}
-
-function envBool(name) {
-  return ['1', 'true', 'yes', 'on'].includes(String(process.env[name] || '').trim().toLowerCase());
-}
+const liveCookies = parseLiveReadinessEnv(process.env).liveCookies;
 
 function liveAccountIdsFromEnv() {
-  const ids = [
-    ...envList('XACTIONS_LIVE_ACCOUNT_IDS'),
-    process.env.XACTIONS_LIVE_ACCOUNT_A_ID,
-    process.env.XACTIONS_LIVE_ACCOUNT_B_ID,
-  ]
-    .map((value) => String(value || '').trim())
-    .filter(Boolean);
-
-  return [...new Set(ids)];
+  return parseLiveReadinessEnv(process.env).requestedIds;
 }
 
 function liveAccountUsernamesFromEnv() {
-  const usernames = [
-    ...envList('XACTIONS_LIVE_ACCOUNT_USERNAMES'),
-    process.env.XACTIONS_LIVE_ACCOUNT_A_USERNAME,
-    process.env.XACTIONS_LIVE_ACCOUNT_B_USERNAME,
-  ]
-    .map((value) => String(value || '').replace(/^@/, '').trim().toLowerCase())
-    .filter(Boolean);
-
-  return [...new Set(usernames)];
+  return parseLiveReadinessEnv(process.env).requestedUsernames;
 }
 
 function shouldUseExistingAccounts() {
-  return liveAccountIdsFromEnv().length > 0
-    || liveAccountUsernamesFromEnv().length > 0
-    || envBool('XACTIONS_LIVE_USE_EXISTING_ACCOUNTS');
+  return shouldUseExistingAccountsFromEnv(process.env);
 }
 
 async function diagnoseReadiness(user) {
@@ -82,68 +55,14 @@ async function diagnoseReadiness(user) {
       })
     : [];
 
-  const requestedIds = liveAccountIdsFromEnv();
-  const requestedUsernames = liveAccountUsernamesFromEnv();
-  const useExisting = envBool('XACTIONS_LIVE_USE_EXISTING_ACCOUNTS');
-  const selectorCount = [
-    requestedIds.length > 0,
-    requestedUsernames.length > 0,
-    useExisting,
-  ].filter(Boolean).length;
-  const activeIds = new Set(activeAccounts.map((account) => account.id));
-  const activeUsernames = new Set(activeAccounts.map((account) => String(account.username || '').toLowerCase()));
-  const readyWithCookies = Boolean(liveCookies[0] && liveCookies[1] && liveCookies[0] !== liveCookies[1]);
-  const readyWithIds = requestedIds.length === 2 && requestedIds.every((id) => activeIds.has(id));
-  const readyWithUsernames = requestedUsernames.length === 2
-    && requestedUsernames.every((username) => activeUsernames.has(username));
-  const readyWithFirstActive = useExisting && activeAccounts.length >= 2;
-  const readyWithExistingAccounts = selectorCount === 1
-    && (readyWithIds || readyWithUsernames || readyWithFirstActive);
-
-  const reasons = [];
-  if (!user) reasons.push(`Smoke user not found: ${smokeUsername}`);
-  if (!profileTarget) reasons.push('XACTIONS_LIVE_PROFILE_TARGET is empty.');
-  if (liveCookies[0] && liveCookies[1] && liveCookies[0] === liveCookies[1]) {
-    reasons.push('XACTIONS_LIVE_ACCOUNT_A_COOKIE and XACTIONS_LIVE_ACCOUNT_B_COOKIE must be different.');
-  }
-  if (selectorCount > 1) {
-    reasons.push('Use only one existing-account selector at a time.');
-  }
-  if (!readyWithCookies && !readyWithExistingAccounts) {
-    reasons.push('Provide two live cookies or select exactly two active existing XAccounts.');
-  }
-
-  return {
+  return evaluateLiveReadiness({
+    env: process.env,
+    user,
+    activeAccounts,
     smokeUsername,
-    smokeUserFound: Boolean(user),
     profileTarget,
-    liveCookies: {
-      accountA: Boolean(liveCookies[0]),
-      accountB: Boolean(liveCookies[1]),
-      bothPresent: Boolean(liveCookies[0] && liveCookies[1]),
-      different: Boolean(liveCookies[0] && liveCookies[1] && liveCookies[0] !== liveCookies[1]),
-    },
-    existingSelectors: {
-      ids: requestedIds.length,
-      usernames: requestedUsernames.length,
-      useFirstActive: useExisting,
-      selectorCount,
-    },
-    activeXAccounts: activeAccounts.length,
-    verifiedActiveXAccounts: activeAccounts.filter((account) => account.lastVerifiedAt).length,
-    accounts: activeAccounts.map((account) => ({
-      id: account.id,
-      username: account.username,
-      status: account.status,
-      isDefault: account.isDefault,
-      verified: Boolean(account.lastVerifiedAt),
-      updatedAt: account.updatedAt,
-    })),
-    readyWithCookies,
-    readyWithExistingAccounts,
-    ready: Boolean(user && profileTarget && (readyWithCookies || readyWithExistingAccounts)),
-    reasons,
-  };
+    requireProfileTarget: true,
+  });
 }
 
 function readinessError(readiness) {
@@ -354,7 +273,7 @@ async function createCookieBackedAccounts(token) {
 async function resolveExistingAccounts(user) {
   const accountIds = liveAccountIdsFromEnv();
   const usernames = liveAccountUsernamesFromEnv();
-  const useFirstActive = envBool('XACTIONS_LIVE_USE_EXISTING_ACCOUNTS');
+  const useFirstActive = envBool(process.env, 'XACTIONS_LIVE_USE_EXISTING_ACCOUNTS');
   const selectorCount = [accountIds.length > 0, usernames.length > 0, useFirstActive].filter(Boolean).length;
 
   assert(selectorCount === 1, 'Use exactly one existing-account selector: XACTIONS_LIVE_ACCOUNT_IDS, XACTIONS_LIVE_ACCOUNT_USERNAMES, or XACTIONS_LIVE_USE_EXISTING_ACCOUNTS=true.');
