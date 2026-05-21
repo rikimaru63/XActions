@@ -19,6 +19,8 @@ import { autoCommentBrowser } from './operations/puppeteer/autoComment.js';
 import { targetEngageBrowser } from './operations/puppeteer/targetEngage.js';
 import browserAutomation from './browserAutomation.js';
 import { getDecryptedSessionCookie } from '../routes/session-auth.js';
+import { getDecryptedAccountCookie } from './accountStore.js';
+import { startScheduledActionScheduler } from './scheduledActions.js';
 
 const prisma = new PrismaClient();
 
@@ -283,6 +285,19 @@ function toJsonString(value) {
 async function resolveJobConfig(job) {
   const config = job.data.config || {};
 
+  if (job.data.accountId) {
+    const accountCookie = job.data.userId
+      ? await getDecryptedAccountCookie(job.data.userId, job.data.accountId).catch(() => null)
+      : null;
+
+    if (accountCookie) {
+      return {
+        ...config,
+        sessionCookie: accountCookie,
+      };
+    }
+  }
+
   if (job.data.authMethod === 'session' || config.sessionCookie) {
     const storedCookie = job.data.userId
       ? await getDecryptedSessionCookie(job.data.userId).catch(() => null)
@@ -500,6 +515,18 @@ operationsQueue.on('active', async (job) => {
   }).catch((error) => {
     console.error(`Failed to mark job active: ${job.id}`, error);
   });
+
+  if (job.data.scheduledActionRunId) {
+    await prisma.scheduledActionRun.update({
+      where: { id: job.data.scheduledActionRunId },
+      data: {
+        status: 'running',
+        startedAt: new Date(),
+      },
+    }).catch((error) => {
+      console.error(`Failed to mark scheduled run active: ${job.id}`, error);
+    });
+  }
 });
 
 operationsQueue.on('completed', async (job, result) => {
@@ -515,6 +542,18 @@ operationsQueue.on('completed', async (job, result) => {
       result: toJsonString(result)
     }
   });
+
+  if (job.data.scheduledActionRunId) {
+    await prisma.scheduledActionRun.update({
+      where: { id: job.data.scheduledActionRunId },
+      data: {
+        status: 'completed',
+        finishedAt: new Date(),
+      },
+    }).catch((error) => {
+      console.error(`Failed to mark scheduled run completed: ${job.id}`, error);
+    });
+  }
 });
 
 operationsQueue.on('failed', async (job, err) => {
@@ -530,6 +569,40 @@ operationsQueue.on('failed', async (job, err) => {
       retryCount: job.attemptsMade
     }
   });
+
+  if (job.data.scheduledActionRunId) {
+    await prisma.scheduledActionRun.update({
+      where: { id: job.data.scheduledActionRunId },
+      data: {
+        status: 'failed',
+        finishedAt: new Date(),
+        error: err.message,
+      },
+    }).catch((error) => {
+      console.error(`Failed to mark scheduled run failed: ${job.id}`, error);
+    });
+  }
+
+  if (job.data.scheduledActionId) {
+    const schedule = await prisma.scheduledAction.findUnique({
+      where: { id: job.data.scheduledActionId },
+      select: { id: true, failureCount: true, maxRetries: true, status: true },
+    }).catch(() => null);
+
+    if (schedule) {
+      const nextFailureCount = (schedule.failureCount || 0) + 1;
+      await prisma.scheduledAction.update({
+        where: { id: schedule.id },
+        data: {
+          failureCount: nextFailureCount,
+          lastError: err.message,
+          status: nextFailureCount > (schedule.maxRetries || 2) ? 'failed' : schedule.status,
+        },
+      }).catch((error) => {
+        console.error(`Failed to update scheduled action failure state: ${job.id}`, error);
+      });
+    }
+  }
 });
 
 operationsQueue.on('stalled', async (job) => {
@@ -546,6 +619,10 @@ process.on('SIGTERM', async () => {
 
 // Periodic cleanup of cancelled job markers
 setInterval(cleanupCancelledJobs, 3600000); // Every hour
+
+startScheduledActionScheduler(queueJob, {
+  intervalMs: Number(process.env.SCHEDULED_ACTIONS_INTERVAL_MS) || 30000,
+});
 
 export {
   addJob,

@@ -1,45 +1,13 @@
 import express from 'express';
-import crypto from 'crypto';
 import { body, validationResult } from 'express-validator';
 import { PrismaClient } from '@prisma/client';
 import { authenticate } from '../middleware/auth.js';
 import browserAutomation from '../services/browserAutomation.js';
+import { decrypt, encrypt } from '../services/sessionCrypto.js';
+import { upsertAccountForUser } from '../services/accountStore.js';
 
 const router = express.Router();
 const prisma = new PrismaClient();
-
-// Encryption helpers for session cookies
-const ENCRYPTION_KEY = process.env.SESSION_SECRET || process.env.JWT_SECRET || 'default-key-change-in-production';
-const ALGORITHM = 'aes-256-gcm';
-
-function encrypt(text) {
-  const key = crypto.scryptSync(ENCRYPTION_KEY, 'salt', 32);
-  const iv = crypto.randomBytes(16);
-  const cipher = crypto.createCipheriv(ALGORITHM, key, iv);
-  let encrypted = cipher.update(text, 'utf8', 'hex');
-  encrypted += cipher.final('hex');
-  const authTag = cipher.getAuthTag();
-  return iv.toString('hex') + ':' + authTag.toString('hex') + ':' + encrypted;
-}
-
-function decrypt(encryptedData) {
-  try {
-    const parts = encryptedData.split(':');
-    if (parts.length !== 3) return null;
-    const key = crypto.scryptSync(ENCRYPTION_KEY, 'salt', 32);
-    const iv = Buffer.from(parts[0], 'hex');
-    const authTag = Buffer.from(parts[1], 'hex');
-    const encrypted = parts[2];
-    const decipher = crypto.createDecipheriv(ALGORITHM, key, iv);
-    decipher.setAuthTag(authTag);
-    let decrypted = decipher.update(encrypted, 'hex', 'utf8');
-    decrypted += decipher.final('utf8');
-    return decrypted;
-  } catch (error) {
-    console.error('Decryption error:', error.message);
-    return null;
-  }
-}
 
 // Save session cookie for browser automation
 router.post('/save-session',
@@ -70,13 +38,21 @@ router.post('/save-session',
 
       // Save encrypted session cookie to user record
       const encryptedCookie = encrypt(sessionCookie);
-      await prisma.user.update({
+      const updatedUser = await prisma.user.update({
         where: { id: req.user.id },
         data: {
           sessionCookie: encryptedCookie,
           twitterUsername: username || null,
           authMethod: 'session' // Track which method user prefers
         }
+      });
+
+      await upsertAccountForUser(updatedUser, {
+        username: username || updatedUser.twitterUsername || updatedUser.username,
+        encryptedCookie,
+        isDefault: true,
+        status: 'active',
+        lastVerifiedAt: new Date(),
       });
 
       res.json({ 

@@ -1,0 +1,1314 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>コンソール - XActions</title>
+  <meta name="robots" content="noindex, nofollow">
+  <style>
+    :root {
+      --bg: #000;
+      --surface: #0f1419;
+      --surface-2: #16181c;
+      --line: #2f3336;
+      --line-soft: #202327;
+      --text: #e7e9ea;
+      --muted: #8b98a5;
+      --accent: #1d9bf0;
+      --accent-soft: rgba(29, 155, 240, 0.14);
+      --green: #00ba7c;
+      --yellow: #ffb84d;
+      --red: #f4212e;
+      --radius: 8px;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Hiragino Sans", "Noto Sans JP", sans-serif;
+      letter-spacing: 0;
+    }
+
+    button,
+    input,
+    textarea,
+    select {
+      font: inherit;
+    }
+
+    a { color: inherit; }
+
+    .shell {
+      min-height: 100vh;
+      display: grid;
+      grid-template-columns: 244px minmax(360px, 1fr) minmax(340px, 420px);
+    }
+
+    .rail,
+    .detail {
+      border-color: var(--line);
+      background: var(--bg);
+    }
+
+    .rail {
+      border-right: 1px solid var(--line);
+      padding: 16px 12px;
+      position: sticky;
+      top: 0;
+      height: 100vh;
+      overflow: auto;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 8px 10px 18px;
+      font-weight: 800;
+      font-size: 20px;
+    }
+
+    .account {
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      padding: 12px;
+      margin: 0 4px 14px;
+      background: var(--surface);
+    }
+
+    .account-label {
+      color: var(--muted);
+      font-size: 12px;
+      margin-bottom: 6px;
+    }
+
+    .account-name {
+      font-weight: 750;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .account-state {
+      margin-top: 8px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .account-list,
+    .account-picker {
+      display: grid;
+      gap: 8px;
+    }
+
+    .account-item,
+    .account-choice {
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      padding: 9px 10px;
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr);
+      gap: 9px;
+      align-items: center;
+      background: var(--bg);
+    }
+
+    .account-item input,
+    .account-choice input {
+      width: 16px;
+      min-height: 16px;
+    }
+
+    .account-meta {
+      min-width: 0;
+    }
+
+    .account-meta strong {
+      display: block;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font-size: 13px;
+    }
+
+    .account-meta span {
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .account-form {
+      display: grid;
+      gap: 8px;
+      margin-top: 12px;
+    }
+
+    .account-form textarea {
+      min-height: 86px;
+    }
+
+    .account-tools {
+      display: flex;
+      justify-content: space-between;
+      gap: 8px;
+      margin-top: 10px;
+    }
+
+    .nav {
+      display: grid;
+      gap: 2px;
+    }
+
+    .nav button {
+      width: 100%;
+      border: 0;
+      border-radius: 999px;
+      background: transparent;
+      color: var(--text);
+      padding: 10px 12px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      cursor: pointer;
+      text-align: left;
+    }
+
+    .nav button:hover,
+    .nav button.active {
+      background: var(--surface-2);
+    }
+
+    .count {
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .main {
+      min-width: 0;
+      border-right: 1px solid var(--line);
+    }
+
+    .top {
+      height: 64px;
+      padding: 0 20px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid var(--line);
+      position: sticky;
+      top: 0;
+      background: rgba(0, 0, 0, 0.86);
+      backdrop-filter: blur(12px);
+      z-index: 2;
+    }
+
+    h1,
+    h2,
+    h3 {
+      margin: 0;
+      line-height: 1.2;
+    }
+
+    h1 { font-size: 22px; }
+    h2 { font-size: 18px; }
+    h3 { font-size: 15px; }
+
+    .top-actions {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .link-btn,
+    .primary,
+    .secondary,
+    .danger {
+      border: 0;
+      border-radius: 999px;
+      min-height: 40px;
+      padding: 0 16px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      text-decoration: none;
+      font-weight: 750;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+
+    .primary { background: var(--accent); color: white; }
+    .secondary { background: var(--surface-2); color: var(--text); border: 1px solid var(--line); }
+    .danger { background: rgba(244, 33, 46, 0.14); color: #ff818a; border: 1px solid rgba(244, 33, 46, 0.45); }
+    .link-btn { color: var(--accent); background: transparent; padding: 0; min-height: auto; }
+    button:disabled { opacity: 0.48; cursor: not-allowed; }
+
+    .search {
+      padding: 16px 20px 12px;
+      border-bottom: 1px solid var(--line-soft);
+    }
+
+    .search input {
+      width: 100%;
+      min-height: 44px;
+      border-radius: 999px;
+      border: 1px solid var(--line);
+      background: var(--surface);
+      color: var(--text);
+      padding: 0 16px;
+      outline: none;
+    }
+
+    .search input:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 1px var(--accent);
+    }
+
+    .feature-list {
+      display: grid;
+    }
+
+    .feature-row {
+      border: 0;
+      border-bottom: 1px solid var(--line-soft);
+      background: transparent;
+      color: var(--text);
+      padding: 16px 20px;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 14px;
+      text-align: left;
+      cursor: pointer;
+    }
+
+    .feature-row:hover,
+    .feature-row.active {
+      background: rgba(231, 233, 234, 0.045);
+    }
+
+    .feature-title {
+      font-size: 16px;
+      font-weight: 800;
+      margin-bottom: 5px;
+    }
+
+    .feature-summary {
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.5;
+    }
+
+    .badges {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+      align-content: flex-start;
+    }
+
+    .badge {
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      color: var(--muted);
+      font-size: 12px;
+      padding: 3px 8px;
+      height: 24px;
+      line-height: 16px;
+    }
+
+    .badge.available { color: var(--green); border-color: rgba(0, 186, 124, 0.5); }
+    .badge.legacy { color: var(--yellow); border-color: rgba(255, 184, 77, 0.5); }
+    .badge.high { color: #ff818a; border-color: rgba(244, 33, 46, 0.45); }
+
+    .detail {
+      height: 100vh;
+      position: sticky;
+      top: 0;
+      overflow: auto;
+    }
+
+    .detail-head {
+      padding: 20px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .detail-summary {
+      color: var(--muted);
+      font-size: 14px;
+      line-height: 1.6;
+      margin: 10px 0 14px;
+    }
+
+    .tabs {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      border-bottom: 1px solid var(--line);
+    }
+
+    .tabs button {
+      min-height: 44px;
+      border: 0;
+      background: transparent;
+      color: var(--muted);
+      cursor: pointer;
+      border-bottom: 2px solid transparent;
+    }
+
+    .tabs button.active {
+      color: var(--text);
+      border-bottom-color: var(--accent);
+      font-weight: 750;
+    }
+
+    .panel {
+      padding: 18px 20px 28px;
+    }
+
+    .field {
+      margin-bottom: 15px;
+    }
+
+    label {
+      display: block;
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 700;
+      margin-bottom: 7px;
+    }
+
+    input,
+    textarea,
+    select {
+      width: 100%;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: var(--bg);
+      color: var(--text);
+      min-height: 42px;
+      padding: 10px 12px;
+      outline: none;
+    }
+
+    textarea {
+      min-height: 108px;
+      resize: vertical;
+    }
+
+    input:focus,
+    textarea:focus,
+    select:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 1px var(--accent);
+    }
+
+    .check {
+      min-height: 42px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      padding: 0 12px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      background: var(--bg);
+    }
+
+    .check input {
+      width: 18px;
+      min-height: 18px;
+    }
+
+    .mode {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      margin: 6px 0 16px;
+    }
+
+    .mode button {
+      min-height: 42px;
+      border-radius: var(--radius);
+      border: 1px solid var(--line);
+      background: var(--bg);
+      color: var(--text);
+      cursor: pointer;
+    }
+
+    .mode button.active {
+      border-color: var(--accent);
+      background: var(--accent-soft);
+    }
+
+    .status {
+      display: none;
+      margin-top: 14px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      padding: 12px;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.5;
+    }
+
+    .status.visible { display: block; }
+    .status.ok { color: var(--green); border-color: rgba(0, 186, 124, 0.5); }
+    .status.err { color: #ff818a; border-color: rgba(244, 33, 46, 0.45); }
+
+    .history-list {
+      display: grid;
+      gap: 10px;
+    }
+
+    .schedule-list {
+      display: grid;
+      gap: 10px;
+      margin-top: 18px;
+    }
+
+    .schedule-actions {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-top: 10px;
+    }
+
+    .schedule-actions button {
+      min-height: 34px;
+      border-radius: 999px;
+      border: 1px solid var(--line);
+      background: var(--bg);
+      color: var(--text);
+      padding: 0 12px;
+      cursor: pointer;
+    }
+
+    .history-item {
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      padding: 12px;
+      background: var(--surface);
+    }
+
+    .history-top {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 8px;
+    }
+
+    .history-title {
+      font-weight: 760;
+      font-size: 14px;
+    }
+
+    .history-meta {
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.5;
+    }
+
+    .empty {
+      border: 1px dashed var(--line);
+      border-radius: var(--radius);
+      padding: 22px;
+      color: var(--muted);
+      text-align: center;
+      font-size: 14px;
+    }
+
+    .hidden { display: none !important; }
+
+    @media (max-width: 1080px) {
+      .shell {
+        grid-template-columns: 220px minmax(0, 1fr);
+      }
+
+      .detail {
+        position: fixed;
+        inset: auto 0 0 0;
+        height: min(82vh, 760px);
+        border-top: 1px solid var(--line);
+        transform: translateY(calc(100% - 68px));
+        transition: transform 0.2s ease;
+        z-index: 20;
+      }
+
+      .detail.open {
+        transform: translateY(0);
+      }
+    }
+
+    @media (max-width: 720px) {
+      .shell {
+        grid-template-columns: 1fr;
+        padding-bottom: 64px;
+      }
+
+      .rail {
+        position: fixed;
+        inset: auto 0 0 0;
+        height: 64px;
+        border-right: 0;
+        border-top: 1px solid var(--line);
+        padding: 6px;
+        z-index: 30;
+        overflow: auto hidden;
+      }
+
+      .brand,
+      .account {
+        display: none;
+      }
+
+      .nav {
+        grid-auto-flow: column;
+        grid-auto-columns: max-content;
+        overflow-x: auto;
+      }
+
+      .nav button {
+        min-width: 92px;
+        justify-content: center;
+      }
+
+      .count {
+        display: none;
+      }
+
+      .main {
+        border-right: 0;
+      }
+
+      .badges {
+        justify-content: flex-start;
+      }
+
+      .feature-row {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+  <script src="/js/config.js"></script>
+</head>
+<body>
+  <div class="shell">
+    <aside class="rail">
+      <div class="brand">
+        <span>XActions</span>
+        <a class="link-btn" href="/dashboard">戻る</a>
+      </div>
+      <div class="account" id="account-box">
+        <div class="account-label">Xアカウント</div>
+        <div class="account-name" id="account-name">確認中</div>
+        <div class="account-state" id="account-state">-</div>
+        <div class="account-list" id="account-list"></div>
+        <div class="account-tools">
+          <button type="button" class="link-btn" id="toggle-account-form">追加</button>
+          <a class="link-btn" href="/dashboard">連携設定</a>
+        </div>
+        <form class="account-form hidden" id="account-form">
+          <input id="new-account-username" autocomplete="off" placeholder="@username">
+          <textarea id="new-account-cookie" placeholder="session cookie"></textarea>
+          <label class="check">
+            <span>デフォルトにする</span>
+            <input id="new-account-default" type="checkbox">
+          </label>
+          <button type="submit" class="secondary">保存</button>
+          <div class="status"></div>
+        </form>
+      </div>
+      <nav class="nav" id="category-nav" aria-label="カテゴリ"></nav>
+    </aside>
+
+    <main class="main">
+      <header class="top">
+        <div>
+          <h1>コンソール</h1>
+        </div>
+        <div class="top-actions">
+          <a class="secondary" href="/actions">旧アクション</a>
+          <a class="primary" href="/dashboard">ホーム</a>
+        </div>
+      </header>
+
+      <div class="search">
+        <input id="feature-search" autocomplete="off" placeholder="機能を検索">
+      </div>
+
+      <section class="feature-list" id="feature-list" aria-live="polite">
+        <div class="empty">読み込み中</div>
+      </section>
+    </main>
+
+    <aside class="detail open" id="detail">
+      <div class="detail-head">
+        <div class="badges" id="detail-badges"></div>
+        <h2 id="detail-title">機能を選択</h2>
+        <p class="detail-summary" id="detail-summary">左の一覧から機能を選んでください。</p>
+      </div>
+      <div class="tabs">
+        <button type="button" class="active" data-tab="settings">設定</button>
+        <button type="button" data-tab="schedule">予約</button>
+        <button type="button" data-tab="history">履歴</button>
+      </div>
+
+      <section class="panel" id="settings-panel"></section>
+      <section class="panel hidden" id="schedule-panel"></section>
+      <section class="panel hidden" id="history-panel"></section>
+    </aside>
+  </div>
+
+  <script>
+    const state = {
+      catalog: null,
+      accounts: [],
+      selectedCategory: 'action',
+      selectedFeatureId: null,
+      selectedTab: 'settings',
+      mode: 'dryRun',
+      query: '',
+      selectedAccountIds: [],
+    };
+
+    const els = {
+      accountName: document.getElementById('account-name'),
+      accountState: document.getElementById('account-state'),
+      accountList: document.getElementById('account-list'),
+      accountForm: document.getElementById('account-form'),
+      toggleAccountForm: document.getElementById('toggle-account-form'),
+      newAccountUsername: document.getElementById('new-account-username'),
+      newAccountCookie: document.getElementById('new-account-cookie'),
+      newAccountDefault: document.getElementById('new-account-default'),
+      nav: document.getElementById('category-nav'),
+      list: document.getElementById('feature-list'),
+      search: document.getElementById('feature-search'),
+      detail: document.getElementById('detail'),
+      detailTitle: document.getElementById('detail-title'),
+      detailSummary: document.getElementById('detail-summary'),
+      detailBadges: document.getElementById('detail-badges'),
+      settingsPanel: document.getElementById('settings-panel'),
+      schedulePanel: document.getElementById('schedule-panel'),
+      historyPanel: document.getElementById('history-panel'),
+    };
+
+    function escapeHtml(value) {
+      return String(value ?? '').replace(/[&<>"']/g, (char) => ({
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#39;',
+      })[char]);
+    }
+
+    function feature() {
+      return state.catalog?.features.find((item) => item.id === state.selectedFeatureId) || null;
+    }
+
+    function jaStatus(status) {
+      return {
+        pending: '待機中',
+        queued: '待機中',
+        waiting: '待機中',
+        active: '実行中',
+        processing: '実行中',
+        completed: '完了',
+        failed: '失敗',
+        cancelled: '停止',
+      }[status] || status || '-';
+    }
+
+    function timeText(value) {
+      if (!value) return '';
+      const date = new Date(value);
+      return date.toLocaleString('ja-JP', { dateStyle: 'short', timeStyle: 'short' });
+    }
+
+    function fieldValue(field) {
+      const el = document.querySelector(`[data-field="${field.key}"]`);
+      if (!el) return undefined;
+      if (field.type === 'boolean') return el.checked;
+      if (field.type === 'number') return Number(el.value);
+      return el.value;
+    }
+
+    function collectConfig(selected) {
+      const config = {};
+      for (const field of selected.fields || []) {
+        config[field.key] = fieldValue(field);
+      }
+      return config;
+    }
+
+    function setStatus(target, message, type = '') {
+      const el = target.querySelector('.status');
+      if (!el) return;
+      el.textContent = message;
+      el.className = `status visible ${type}`;
+    }
+
+    function activeAccounts() {
+      return state.accounts.filter((account) => account.status === 'active');
+    }
+
+    function syncSelectedAccounts() {
+      const active = activeAccounts();
+      const valid = new Set(active.map((account) => account.id));
+      state.selectedAccountIds = state.selectedAccountIds.filter((id) => valid.has(id));
+      if (!state.selectedAccountIds.length && active.length) {
+        const defaultAccount = active.find((account) => account.isDefault) || active[0];
+        state.selectedAccountIds = [defaultAccount.id];
+      }
+    }
+
+    function collectAccountIds(scope) {
+      const checked = [...scope.querySelectorAll('[data-account-choice]:checked')].map((input) => input.value);
+      return checked.length ? checked : state.selectedAccountIds;
+    }
+
+    function renderAccountPicker(selected) {
+      if (!selected.accountRequired) return '';
+      syncSelectedAccounts();
+
+      if (!activeAccounts().length) {
+        return '<div class="empty">Xアカウントを追加すると実行できます。</div>';
+      }
+
+      return `
+        <div class="field">
+          <label>実行アカウント</label>
+          <div class="account-picker">
+            ${activeAccounts().map((account) => `
+              <label class="account-choice">
+                <input type="checkbox" data-account-choice value="${escapeHtml(account.id)}" ${state.selectedAccountIds.includes(account.id) ? 'checked' : ''}>
+                <span class="account-meta">
+                  <strong>@${escapeHtml(account.username)}</strong>
+                  <span>${account.isDefault ? 'デフォルト' : account.statusLabel}</span>
+                </span>
+              </label>
+            `).join('')}
+          </div>
+        </div>
+      `;
+    }
+
+    function bindAccountPicker(scope) {
+      scope.querySelectorAll('[data-account-choice]').forEach((input) => {
+        input.addEventListener('change', () => {
+          state.selectedAccountIds = [...scope.querySelectorAll('[data-account-choice]:checked')].map((item) => item.value);
+        });
+      });
+    }
+
+    function renderAccount() {
+      syncSelectedAccounts();
+
+      if (!state.accounts.length) {
+        els.accountName.textContent = '未連携';
+        els.accountState.innerHTML = '<a href="/dashboard">X連携を設定</a>';
+        els.accountList.innerHTML = '';
+        return;
+      }
+
+      const defaultAccount = state.accounts.find((account) => account.isDefault) || state.accounts[0];
+      els.accountName.textContent = `@${defaultAccount.username}`;
+      els.accountState.textContent = `${state.accounts.length}件 / ${activeAccounts().length}件が実行可能`;
+      els.accountList.innerHTML = state.accounts.map((account) => `
+        <label class="account-item">
+          <input type="checkbox" value="${escapeHtml(account.id)}" ${state.selectedAccountIds.includes(account.id) ? 'checked' : ''} ${account.status !== 'active' ? 'disabled' : ''}>
+          <span class="account-meta">
+            <strong>@${escapeHtml(account.username)}</strong>
+            <span>${escapeHtml(account.isDefault ? 'デフォルト' : account.statusLabel)}</span>
+          </span>
+        </label>
+      `).join('');
+
+      els.accountList.querySelectorAll('input[type="checkbox"]').forEach((input) => {
+        input.addEventListener('change', () => {
+          state.selectedAccountIds = [...els.accountList.querySelectorAll('input[type="checkbox"]:checked')].map((item) => item.value);
+          renderDetail();
+        });
+      });
+    }
+
+    function renderNav() {
+      els.nav.innerHTML = state.catalog.categories.map((category) => `
+        <button type="button" class="${category.id === state.selectedCategory ? 'active' : ''}" data-category="${escapeHtml(category.id)}">
+          <span>${escapeHtml(category.title)}</span>
+          <span class="count">${category.available}/${category.total}</span>
+        </button>
+      `).join('');
+
+      els.nav.querySelectorAll('button').forEach((button) => {
+        button.addEventListener('click', () => {
+          state.selectedCategory = button.dataset.category;
+          state.query = '';
+          els.search.value = '';
+          const first = filteredFeatures()[0];
+          state.selectedFeatureId = first?.id || null;
+          render();
+        });
+      });
+    }
+
+    function filteredFeatures() {
+      const query = state.query.trim().toLowerCase();
+      return state.catalog.features.filter((item) => {
+        const inCategory = item.category === state.selectedCategory;
+        const matches = !query || `${item.title} ${item.summary}`.toLowerCase().includes(query);
+        return inCategory && matches;
+      });
+    }
+
+    function renderList() {
+      const items = filteredFeatures();
+      if (!items.length) {
+        els.list.innerHTML = '<div class="empty">該当する機能がありません。</div>';
+        return;
+      }
+
+      els.list.innerHTML = items.map((item) => `
+        <button type="button" class="feature-row ${item.id === state.selectedFeatureId ? 'active' : ''}" data-feature="${escapeHtml(item.id)}">
+          <span>
+            <span class="feature-title">${escapeHtml(item.title)}</span>
+            <span class="feature-summary">${escapeHtml(item.summary)}</span>
+          </span>
+          <span class="badges">
+            <span class="badge ${escapeHtml(item.status)}">${escapeHtml(item.statusLabel)}</span>
+            ${item.accountRequired ? '<span class="badge">X連携</span>' : ''}
+            ${item.supportsSchedule ? '<span class="badge">予約</span>' : ''}
+          </span>
+        </button>
+      `).join('');
+
+      els.list.querySelectorAll('.feature-row').forEach((button) => {
+        button.addEventListener('click', () => {
+          state.selectedFeatureId = button.dataset.feature;
+          state.selectedTab = 'settings';
+          render();
+          loadHistory();
+        });
+      });
+    }
+
+    function renderDetail() {
+      const selected = feature();
+      if (!selected) {
+        els.detailTitle.textContent = '機能を選択';
+        els.detailSummary.textContent = '左の一覧から機能を選んでください。';
+        els.detailBadges.innerHTML = '';
+        els.settingsPanel.innerHTML = '<div class="empty">機能が選択されていません。</div>';
+        els.schedulePanel.innerHTML = '';
+        els.historyPanel.innerHTML = '';
+        return;
+      }
+
+      els.detail.classList.add('open');
+      els.detailTitle.textContent = selected.title;
+      els.detailSummary.textContent = selected.summary;
+      els.detailBadges.innerHTML = `
+        <span class="badge ${escapeHtml(selected.status)}">${escapeHtml(selected.statusLabel)}</span>
+        <span class="badge ${escapeHtml(selected.riskLevel)}">リスク ${escapeHtml(selected.riskLabel)}</span>
+        ${selected.accountRequired ? '<span class="badge">X連携が必要</span>' : ''}
+      `;
+
+      document.querySelectorAll('.tabs button').forEach((button) => {
+        button.classList.toggle('active', button.dataset.tab === state.selectedTab);
+      });
+      els.settingsPanel.classList.toggle('hidden', state.selectedTab !== 'settings');
+      els.schedulePanel.classList.toggle('hidden', state.selectedTab !== 'schedule');
+      els.historyPanel.classList.toggle('hidden', state.selectedTab !== 'history');
+
+      renderSettings(selected);
+      renderSchedule(selected);
+      if (state.selectedTab === 'schedule') loadSchedules(selected);
+      if (state.selectedTab === 'history') loadHistory();
+    }
+
+    function renderField(field) {
+      const value = field.default ?? '';
+      if (field.type === 'textarea') {
+        return `
+          <div class="field">
+            <label for="field-${escapeHtml(field.key)}">${escapeHtml(field.label)}</label>
+            <textarea id="field-${escapeHtml(field.key)}" data-field="${escapeHtml(field.key)}" maxlength="${field.max || ''}" placeholder="${escapeHtml(field.placeholder || '')}"></textarea>
+          </div>
+        `;
+      }
+      if (field.type === 'boolean') {
+        return `
+          <div class="field">
+            <label>${escapeHtml(field.label)}</label>
+            <div class="check">
+              <span>${field.default ? '有効' : '無効'}</span>
+              <input type="checkbox" data-field="${escapeHtml(field.key)}" ${field.default ? 'checked' : ''}>
+            </div>
+          </div>
+        `;
+      }
+      return `
+        <div class="field">
+          <label for="field-${escapeHtml(field.key)}">${escapeHtml(field.label)}${field.suffix ? ` (${escapeHtml(field.suffix)})` : ''}</label>
+          <input id="field-${escapeHtml(field.key)}"
+            data-field="${escapeHtml(field.key)}"
+            type="${field.type === 'number' ? 'number' : 'text'}"
+            min="${field.min ?? ''}"
+            max="${field.max ?? ''}"
+            step="${field.step ?? ''}"
+            value="${escapeHtml(value)}"
+            placeholder="${escapeHtml(field.placeholder || '')}">
+        </div>
+      `;
+    }
+
+    function renderSettings(selected) {
+      if (selected.status !== 'available') {
+        const target = selected.page || selected.endpoint || '';
+        els.settingsPanel.innerHTML = `
+          <div class="empty">この機能は既存の画面またはAPIで利用できます。</div>
+          ${target && selected.page ? `<a class="primary" href="${escapeHtml(target)}" style="margin-top:14px;width:100%;">開く</a>` : ''}
+          <div class="status"></div>
+        `;
+        return;
+      }
+
+      const disableDryRun = !selected.supportsDryRun;
+      if (disableDryRun && state.mode === 'dryRun') state.mode = 'live';
+
+      els.settingsPanel.innerHTML = `
+        <div class="field">
+          <label>実行方法</label>
+          <div class="mode">
+            <button type="button" data-mode="dryRun" class="${state.mode === 'dryRun' ? 'active' : ''}" ${disableDryRun ? 'disabled' : ''}>確認のみ</button>
+            <button type="button" data-mode="live" class="${state.mode === 'live' ? 'active' : ''}">実行</button>
+          </div>
+        </div>
+        ${renderAccountPicker(selected)}
+        ${(selected.fields || []).map(renderField).join('')}
+        <button type="button" class="${state.mode === 'live' ? 'danger' : 'primary'}" id="execute-btn" style="width:100%;">
+          ${state.mode === 'live' ? '実行する' : '確認のみで実行'}
+        </button>
+        <div class="status"></div>
+      `;
+
+      els.settingsPanel.querySelectorAll('[data-mode]').forEach((button) => {
+        button.addEventListener('click', () => {
+          state.mode = button.dataset.mode;
+          renderSettings(selected);
+        });
+      });
+      bindAccountPicker(els.settingsPanel);
+
+      document.getElementById('execute-btn').addEventListener('click', () => executeFeature(selected));
+    }
+
+    function renderSchedule(selected) {
+      if (!selected.supportsSchedule) {
+        els.schedulePanel.innerHTML = '<div class="empty">この機能は予約実行に対応していません。</div>';
+        return;
+      }
+
+      els.schedulePanel.innerHTML = `
+        ${renderAccountPicker(selected)}
+        <div class="field">
+          <label for="schedule-type">予約タイプ</label>
+          <select id="schedule-type">
+            <option value="once">1回だけ</option>
+            <option value="daily">毎日</option>
+            <option value="weekly">毎週</option>
+            <option value="interval">指定間隔</option>
+            <option value="cron">cron</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="schedule-run-at">日時</label>
+          <input id="schedule-run-at" type="datetime-local">
+        </div>
+        <div class="field">
+          <label for="schedule-interval-minutes">間隔（分）</label>
+          <input id="schedule-interval-minutes" type="number" min="1" max="10080" value="60">
+        </div>
+        <div class="field">
+          <label for="schedule-days-of-week">曜日</label>
+          <input id="schedule-days-of-week" placeholder="0,1,2,3,4,5,6">
+        </div>
+        <div class="field">
+          <label for="schedule-cron">cron</label>
+          <input id="schedule-cron" placeholder="*/30 * * * *">
+        </div>
+        <div class="field">
+          <label for="schedule-timezone">タイムゾーン</label>
+          <input id="schedule-timezone" value="Asia/Tokyo">
+        </div>
+        <div class="field">
+          <label for="schedule-retries">失敗時の再試行</label>
+          <input id="schedule-retries" type="number" min="0" max="5" value="2">
+        </div>
+        <button type="button" class="secondary" id="schedule-btn" style="width:100%;">予約を保存</button>
+        <div class="status"></div>
+        <div class="schedule-list" id="schedule-list"></div>
+      `;
+
+      bindAccountPicker(els.schedulePanel);
+      document.getElementById('schedule-btn').addEventListener('click', () => scheduleFeature(selected));
+    }
+
+    async function executeFeature(selected) {
+      const config = collectConfig(selected);
+      if (state.mode === 'live') {
+        const ok = window.confirm('この操作を実行します。よろしいですか？');
+        if (!ok) return;
+      }
+
+      const button = document.getElementById('execute-btn');
+      button.disabled = true;
+      button.textContent = '送信中';
+
+      try {
+        const result = await apiRequest('/console/actions/execute', {
+          method: 'POST',
+          body: JSON.stringify({
+            featureId: selected.id,
+            accountIds: collectAccountIds(els.settingsPanel),
+            mode: state.mode,
+            config,
+          }),
+        });
+        setStatus(els.settingsPanel, `実行を受け付けました: ${result.operations?.length || 1}件`, 'ok');
+        await loadHistory();
+      } catch (error) {
+        setStatus(els.settingsPanel, error.message, 'err');
+      } finally {
+        button.disabled = false;
+        button.textContent = state.mode === 'live' ? '実行する' : '確認のみで実行';
+      }
+    }
+
+    async function scheduleFeature(selected) {
+      try {
+        await apiRequest('/console/actions/schedule', {
+          method: 'POST',
+          body: JSON.stringify({
+            featureId: selected.id,
+            accountIds: collectAccountIds(els.schedulePanel),
+            mode: state.mode,
+            config: collectConfig(selected),
+            maxRetries: Number(document.getElementById('schedule-retries').value || 2),
+            schedule: {
+              type: document.getElementById('schedule-type').value,
+              runAt: document.getElementById('schedule-run-at').value,
+              intervalMinutes: Number(document.getElementById('schedule-interval-minutes').value || 60),
+              daysOfWeek: document.getElementById('schedule-days-of-week').value,
+              cron: document.getElementById('schedule-cron').value,
+              timezone: document.getElementById('schedule-timezone').value,
+            },
+          }),
+        });
+        setStatus(els.schedulePanel, '予約を保存しました。', 'ok');
+        await loadSchedules(selected);
+      } catch (error) {
+        setStatus(els.schedulePanel, error.message, 'err');
+      }
+    }
+
+    async function loadSchedules(selected) {
+      const list = document.getElementById('schedule-list');
+      if (!list) return;
+
+      list.innerHTML = '<div class="empty">予約を読み込み中</div>';
+      try {
+        const data = await apiRequest(`/scheduled-actions?featureId=${encodeURIComponent(selected.id)}&limit=10`);
+        if (!data.schedules.length) {
+          list.innerHTML = '<div class="empty">この機能の予約はまだありません。</div>';
+          return;
+        }
+
+        list.innerHTML = data.schedules.map((schedule) => `
+          <div class="history-item" data-schedule-id="${escapeHtml(schedule.id)}">
+            <div class="history-top">
+              <div>
+                <div class="history-title">${escapeHtml(schedule.name)}</div>
+                <div class="history-meta">${escapeHtml(schedule.account?.username ? `@${schedule.account.username}` : 'アカウント未指定')} / 次回 ${escapeHtml(timeText(schedule.nextRunAt) || '-')}</div>
+              </div>
+              <span class="badge ${schedule.status === 'active' ? 'available' : ''}">${escapeHtml(schedule.status)}</span>
+            </div>
+            <div class="history-meta">${escapeHtml(schedule.scheduleType)} / ${escapeHtml(schedule.mode === 'live' ? '実行' : '確認のみ')}</div>
+            <div class="schedule-actions">
+              <button type="button" data-run-now="${escapeHtml(schedule.id)}">今すぐ実行</button>
+              <button type="button" data-toggle-schedule="${escapeHtml(schedule.id)}" data-status="${escapeHtml(schedule.status)}">${schedule.status === 'paused' ? '再開' : '停止'}</button>
+              <button type="button" data-delete-schedule="${escapeHtml(schedule.id)}">削除</button>
+            </div>
+          </div>
+        `).join('');
+
+        list.querySelectorAll('[data-run-now]').forEach((button) => {
+          button.addEventListener('click', () => runScheduleNow(button.dataset.runNow, selected));
+        });
+        list.querySelectorAll('[data-toggle-schedule]').forEach((button) => {
+          button.addEventListener('click', () => toggleSchedule(button.dataset.toggleSchedule, button.dataset.status, selected));
+        });
+        list.querySelectorAll('[data-delete-schedule]').forEach((button) => {
+          button.addEventListener('click', () => deleteSchedule(button.dataset.deleteSchedule, selected));
+        });
+      } catch (error) {
+        list.innerHTML = `<div class="empty">${escapeHtml(error.message)}</div>`;
+      }
+    }
+
+    async function runScheduleNow(id, selected) {
+      try {
+        await apiRequest(`/scheduled-actions/${encodeURIComponent(id)}/run-now`, { method: 'POST' });
+        setStatus(els.schedulePanel, '実行を受け付けました。', 'ok');
+        await loadSchedules(selected);
+        await loadHistory();
+      } catch (error) {
+        setStatus(els.schedulePanel, error.message, 'err');
+      }
+    }
+
+    async function toggleSchedule(id, status, selected) {
+      try {
+        const action = status === 'paused' ? 'resume' : 'pause';
+        await apiRequest(`/scheduled-actions/${encodeURIComponent(id)}/${action}`, { method: 'POST' });
+        await loadSchedules(selected);
+      } catch (error) {
+        setStatus(els.schedulePanel, error.message, 'err');
+      }
+    }
+
+    async function deleteSchedule(id, selected) {
+      const ok = window.confirm('この予約を削除しますか？');
+      if (!ok) return;
+      try {
+        await apiRequest(`/scheduled-actions/${encodeURIComponent(id)}`, { method: 'DELETE' });
+        await loadSchedules(selected);
+      } catch (error) {
+        setStatus(els.schedulePanel, error.message, 'err');
+      }
+    }
+
+    async function loadHistory() {
+      const selected = feature();
+      if (!selected) return;
+
+      els.historyPanel.innerHTML = '<div class="empty">履歴を読み込み中</div>';
+      try {
+        const data = await apiRequest(`/console/history?featureId=${encodeURIComponent(selected.id)}&limit=10`);
+        if (!data.operations.length) {
+          els.historyPanel.innerHTML = '<div class="empty">この機能の履歴はまだありません。</div>';
+          return;
+        }
+        els.historyPanel.innerHTML = `
+          <div class="history-list">
+            ${data.operations.map((operation) => `
+              <div class="history-item">
+                <div class="history-top">
+                  <div>
+                    <div class="history-title">${escapeHtml(jaStatus(operation.status))}</div>
+                    <div class="history-meta">${escapeHtml(timeText(operation.createdAt))}</div>
+                  </div>
+                  <span class="badge ${operation.status === 'completed' ? 'available' : operation.status === 'failed' ? 'high' : ''}">${escapeHtml(operation.type)}</span>
+                </div>
+                <div class="history-meta">${escapeHtml(operation.error || summarizeConfig(operation.config) || '処理待ち')}</div>
+              </div>
+            `).join('')}
+          </div>
+        `;
+      } catch (error) {
+        els.historyPanel.innerHTML = `<div class="empty">${escapeHtml(error.message)}</div>`;
+      }
+    }
+
+    function summarizeConfig(config) {
+      if (!config) return '';
+      if (config.targetUsername) return `@${config.targetUsername}`;
+      if (config.username) return `@${config.username}`;
+      if (config.tweetUrl) return config.tweetUrl;
+      if (config.query) return config.query;
+      return '';
+    }
+
+    function render() {
+      renderAccount();
+      renderNav();
+      renderList();
+      renderDetail();
+    }
+
+    async function loadAccounts() {
+      const accountData = await apiRequest('/console/accounts');
+      state.accounts = accountData.accounts || [];
+      syncSelectedAccounts();
+    }
+
+    async function init() {
+      if (!localStorage.getItem('authToken')) {
+        window.location.href = '/login';
+        return;
+      }
+
+      try {
+        const [catalog] = await Promise.all([
+          apiRequest('/console/features'),
+          loadAccounts(),
+        ]);
+
+        state.catalog = catalog;
+        state.selectedFeatureId = catalog.features.find((item) => item.category === state.selectedCategory && item.status === 'available')?.id
+          || catalog.features.find((item) => item.category === state.selectedCategory)?.id
+          || catalog.features[0]?.id;
+
+        render();
+        loadHistory();
+      } catch (error) {
+        els.list.innerHTML = `<div class="empty">${escapeHtml(error.message)}</div>`;
+      }
+    }
+
+    els.search.addEventListener('input', () => {
+      state.query = els.search.value;
+      renderList();
+    });
+
+    els.toggleAccountForm.addEventListener('click', () => {
+      els.accountForm.classList.toggle('hidden');
+    });
+
+    els.accountForm.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      setStatus(els.accountForm, '保存中');
+
+      try {
+        await apiRequest('/accounts', {
+          method: 'POST',
+          body: JSON.stringify({
+            username: els.newAccountUsername.value,
+            sessionCookie: els.newAccountCookie.value,
+            isDefault: els.newAccountDefault.checked,
+          }),
+        });
+        els.newAccountUsername.value = '';
+        els.newAccountCookie.value = '';
+        els.newAccountDefault.checked = false;
+        setStatus(els.accountForm, '保存しました。', 'ok');
+        await loadAccounts();
+        render();
+      } catch (error) {
+        setStatus(els.accountForm, error.message, 'err');
+      }
+    });
+
+    document.querySelectorAll('.tabs button').forEach((button) => {
+      button.addEventListener('click', () => {
+        state.selectedTab = button.dataset.tab;
+        renderDetail();
+      });
+    });
+
+    init();
+  </script>
+</body>
+</html>

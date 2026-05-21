@@ -48,7 +48,6 @@ venv/
 node_modules/
 *.db
 *.sqlite
-prisma/migrations/*/migration.sql
 dump.rdb
 dist/
 build/

@@ -66,6 +66,9 @@ import notificationsRoutes from './routes/notifications.js';
 import teamsRoutes from './routes/teams.js';
 import optimizerRoutes from './routes/optimizer.js';
 import actionsRoutes from './routes/actions.js';
+import consoleRoutes from './routes/console.js';
+import accountsRoutes from './routes/accounts.js';
+import scheduledActionsRoutes from './routes/scheduled-actions.js';
 import { startScheduler } from './services/unfollowerScheduler.js';
 import { initializeSocketIO } from './realtime/socketHandler.js';
 import { initializeLicensing, brandingMiddleware } from './services/licensing.js';
@@ -234,6 +237,9 @@ app.use('/api/notifications', notificationsRoutes);
 app.use('/api/teams', teamsRoutes);
 app.use('/api/optimizer', optimizerRoutes);
 app.use('/api/actions', actionsRoutes);
+app.use('/api/console', consoleRoutes);
+app.use('/api/accounts', accountsRoutes);
+app.use('/api/scheduled-actions', scheduledActionsRoutes);
 
 // Plugin routes — mounted under /api/plugins/<plugin-name>/
 function mountPluginRoutes() {
@@ -257,6 +263,10 @@ app.get('/', (req, res) => {
 
 app.get('/dashboard', (req, res) => {
   res.sendFile(path.join(__dirname, '../dashboard/index.html'));
+});
+
+app.get('/console', (req, res) => {
+  res.sendFile(path.join(__dirname, '../dashboard/console.html'));
 });
 
 // Pricing page now redirects to docs - XActions is 100% free
