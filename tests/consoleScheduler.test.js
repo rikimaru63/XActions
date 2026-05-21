@@ -214,6 +214,15 @@ describe('console scheduler helpers', () => {
     expect(script).toContain('XACTIONS_LIVE_USE_EXISTING_ACCOUNTS=true');
   });
 
+  it('does not block headless live readonly smoke on cookie prompts', () => {
+    const script = readFileSync(new URL('../scripts/run-console-live-readonly-host.sh', import.meta.url), 'utf8');
+
+    expect(script).toContain('prompt_and_run_with_cookie_stdin()');
+    expect(script).toContain('[[ ! -t 0 ]]');
+    expect(script).toContain('live readonly smoke is not ready for non-interactive execution.');
+    expect(script).toContain('run with SOURCE=diagnose');
+  });
+
   it('shows skipped run-now results and opens the run history', () => {
     const html = readFileSync(new URL('../dashboard/console.html', import.meta.url), 'utf8');
 

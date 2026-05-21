@@ -46,6 +46,9 @@ bash /tmp/xactions-live-readonly.sh
 4. APIコンテナ環境変数に2件のlive cookieがあればそれを使う
 5. 何も準備できていない場合は非表示入力のcookieプロンプトに戻る
 
+非TTYのヘッドレス実行ではcookieプロンプトを開かず、必要な準備を表示して終了します。
+CIやVPSの自動確認では `XACTIONS_LIVE_READONLY_SOURCE=diagnose` を使うと、cookieを出力せずに不足条件だけ確認できます。
+
 登録済み active XAccount 2件を使う場合:
 
 ```bash

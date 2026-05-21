@@ -189,6 +189,26 @@ run_with_container_cookies() {
     "$API_CONTAINER" npm run smoke:console-live-readonly
 }
 
+prompt_and_run_with_cookie_stdin() {
+  if [[ ! -t 0 ]]; then
+    echo "live readonly smoke is not ready for non-interactive execution." >&2
+    echo "Set XACTIONS_LIVE_ACCOUNT_A_COOKIE and XACTIONS_LIVE_ACCOUNT_B_COOKIE, select two existing XAccounts, or run with SOURCE=diagnose." >&2
+    exit 1
+  fi
+
+  read -rsp 'X Cookie A: ' COOKIE_A
+  echo
+  read -rsp 'X Cookie B: ' COOKIE_B
+  echo
+  if [[ -z "$COOKIE_A" || -z "$COOKIE_B" ]]; then
+    unset COOKIE_A COOKIE_B
+    echo "Both cookies are required." >&2
+    exit 1
+  fi
+  run_with_cookie_stdin "$COOKIE_A" "$COOKIE_B"
+  unset COOKIE_A COOKIE_B
+}
+
 case "$SOURCE" in
   auto)
     if host_has_live_cookies; then
@@ -218,17 +238,7 @@ case "$SOURCE" in
 
     echo "live readonly smoke is not ready: activeXAccounts=${active_count}, live cookies missing"
     echo "Falling back to secure cookie prompt. Press Ctrl+C to stop."
-    read -rsp 'X Cookie A: ' COOKIE_A
-    echo
-    read -rsp 'X Cookie B: ' COOKIE_B
-    echo
-    if [[ -z "$COOKIE_A" || -z "$COOKIE_B" ]]; then
-      unset COOKIE_A COOKIE_B
-      echo "Both cookies are required." >&2
-      exit 1
-    fi
-    run_with_cookie_stdin "$COOKIE_A" "$COOKIE_B"
-    unset COOKIE_A COOKIE_B
+    prompt_and_run_with_cookie_stdin
     ;;
   diagnose)
     diagnose_readiness
@@ -244,16 +254,6 @@ case "$SOURCE" in
     run_with_cookie_stdin "$XACTIONS_LIVE_ACCOUNT_A_COOKIE" "$XACTIONS_LIVE_ACCOUNT_B_COOKIE"
     ;;
   prompt)
-    read -rsp 'X Cookie A: ' COOKIE_A
-    echo
-    read -rsp 'X Cookie B: ' COOKIE_B
-    echo
-    if [[ -z "$COOKIE_A" || -z "$COOKIE_B" ]]; then
-      unset COOKIE_A COOKIE_B
-      echo "Both cookies are required." >&2
-      exit 1
-    fi
-    run_with_cookie_stdin "$COOKIE_A" "$COOKIE_B"
-    unset COOKIE_A COOKIE_B
+    prompt_and_run_with_cookie_stdin
     ;;
 esac
