@@ -195,6 +195,11 @@ NODE
 docker exec "$API_CONTAINER" npm run audit:console-catalog
 echo "ok console catalog audit"
 
+docker exec \
+  -e XACTIONS_SMOKE_USERNAME="$SMOKE_USERNAME" \
+  "$API_CONTAINER" npm run audit:console-acceptance
+echo "ok console acceptance audit"
+
 docker exec "$API_CONTAINER" npm run verify:headless
 echo "ok headless browser"
 

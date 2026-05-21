@@ -130,6 +130,7 @@ function auditStaticAcceptance() {
   const productionMissing = hasAll(productionSmoke + JSON.stringify(pkg.scripts || {}), [
     '/api/health',
     '/console',
+    'audit:console-acceptance',
     'audit:console-catalog',
     'verify:headless',
     'smoke:console-ui',
