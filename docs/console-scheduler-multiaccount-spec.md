@@ -671,6 +671,7 @@ worker未実装のjob typeはUIで `準備中` にせず、実装してから `�
 - 各機能の設定、予約、履歴タブ
 - select / multiSelectによる日本語選択肢
 - DM送信を専用 `sendDM` workerへ接続
+- legacy `/api/actions/target` を統一実行経路へ接続
 - 全カタログ機能のworker到達性監査
 - `XAccount` による複数アカウント管理
 - account CRUD / verify / default
@@ -682,13 +683,13 @@ worker未実装のjob typeはUIで `準備中` にせず、実装してから `�
 - pause / resume / run-now
 - scheduler loop
 - stale lock recovery
-- worker restart recovery smoke
+- worker restart recovery smoke（最新本番 `392a972` で確認済み）
 - live action確認モーダル
 - queue payloadからcookie / token / DM本文を除外
 - legacy DM履歴の本文redaction
 - legacy operation responseのredaction
 - headless Chromium smoke
-- Coolify本番デプロイ
+- Coolify本番デプロイ（最新本番 `392a972`）
 
 2026-05-22時点で残っている完了ゲート。
 
