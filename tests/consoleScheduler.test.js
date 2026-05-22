@@ -737,6 +737,29 @@ describe('console scheduler helpers', () => {
     });
   });
 
+  it('routes the legacy target action API through unified console execution', () => {
+    const route = readFileSync(new URL('../api/routes/actions.js', import.meta.url), 'utf8');
+    const execution = readFileSync(new URL('../api/services/consoleExecution.js', import.meta.url), 'utf8');
+
+    expect(route).toContain("getFeatureById('targetEngage')");
+    expect(route).toContain('createActionPayload(feature');
+    expect(route).toContain('queueConsoleOperations({');
+    expect(route).toContain('resolveLegacyTargetAccounts');
+    expect(route).toContain('listAccountsForUser(user)');
+    expect(route).toContain('実行する内容を1つ以上選んでください。');
+    expect(route).not.toContain("from '../services/jobQueue.js'");
+    expect(route).not.toContain('req.user.sessionCookie');
+    expect(route).not.toContain('X account not connected');
+    expect(route).not.toContain('Target username is required');
+    expect(route).not.toContain('Choose at least one action');
+    expect(route).not.toContain('Failed to queue target action');
+
+    expect(execution).toContain('buildEncryptedRetryConfig');
+    expect(execution).toContain('accountId,');
+    expect(execution).toContain('parentOperationId');
+    expect(execution).toContain('accountIds: accountIds.filter(Boolean)');
+  });
+
   it('keeps legacy DM route responses user-facing in Japanese', () => {
     const route = readFileSync(new URL('../api/routes/messages.js', import.meta.url), 'utf8');
 

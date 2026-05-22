@@ -37,12 +37,14 @@ function auditStaticAcceptance() {
   const server = read('api/server.js');
   const consoleRoute = read('api/routes/console.js');
   const operationsRoute = read('api/routes/operations.js');
+  const legacyActionsRoute = read('api/routes/actions.js');
   const accountsRoute = read('api/routes/accounts.js');
   const messagesRoute = read('api/routes/messages.js');
   const sessionAuthRoute = read('api/routes/session-auth.js');
   const scheduledRoute = read('api/routes/scheduled-actions.js');
   const scheduledService = read('api/services/scheduledActions.js');
   const consoleActions = read('api/services/consoleActions.js');
+  const consoleExecution = read('api/services/consoleExecution.js');
   const featureConfig = read('api/config/features.js');
   const jobQueue = read('api/services/jobQueue.js');
   const queuePayload = read('api/services/queuePayload.js');
@@ -301,6 +303,29 @@ function auditStaticAcceptance() {
     'operations: operations.map(sanitizeOperation)',
   ]);
 
+  const legacyTargetUnifiedMissing = hasAll(legacyActionsRoute + consoleExecution, [
+    "getFeatureById('targetEngage')",
+    'createActionPayload(feature',
+    'queueConsoleOperations({',
+    'resolveLegacyTargetAccounts',
+    'listAccountsForUser(user)',
+    'buildEncryptedRetryConfig',
+    'parentOperationId',
+    'accountIds: accountIds.filter(Boolean)',
+  ]);
+  for (const snippet of [
+    "from '../services/jobQueue.js'",
+    'req.user.sessionCookie',
+    'X account not connected',
+    'Target username is required',
+    'Choose at least one action',
+    'Failed to queue target action',
+  ]) {
+    if (legacyActionsRoute.includes(snippet)) {
+      legacyTargetUnifiedMissing.push(`legacy /api/actions/target still contains ${snippet}`);
+    }
+  }
+
   const workerRestartMissing = hasAll(workerRestartHost + productionSmoke, [
     'docker stop',
     'docker start',
@@ -489,6 +514,13 @@ function auditStaticAcceptance() {
       legacyOperationRedactionMissing.length === 0,
       { route: 'api/routes/operations.js' },
       legacyOperationRedactionMissing
+    ),
+    item(
+      'legacy-target-unified-execution',
+      'Legacy /api/actions/target uses the same account-aware console execution path as /api/console/actions/execute.',
+      legacyTargetUnifiedMissing.length === 0,
+      { route: 'api/routes/actions.js', service: 'api/services/consoleExecution.js' },
+      legacyTargetUnifiedMissing
     ),
     item(
       'production-smoke',
