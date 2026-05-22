@@ -79,4 +79,7 @@ printf '%s\n%s\n' "$XACTIONS_LIVE_ACCOUNT_A_COOKIE" "$XACTIONS_LIVE_ACCOUNT_B_CO
   "$API_CONTAINER" npm run register:console-live-accounts
 
 echo "ok registered live XAccounts for ${SMOKE_USERNAME}"
-echo "Next: XACTIONS_LIVE_READONLY_SOURCE=existing bash /tmp/xactions-live-readonly.sh"
+echo "Next:"
+echo "  api=\"\$(docker ps --format '{{.Names}}' | grep '^api-${APP_UUID}' | head -n 1)\""
+echo "  docker cp \"\$api\":/app/scripts/run-console-live-readonly-host.sh /tmp/xactions-live-readonly.sh"
+echo "  XACTIONS_LIVE_READONLY_SOURCE=existing bash /tmp/xactions-live-readonly.sh"

@@ -298,6 +298,8 @@ describe('console scheduler helpers', () => {
     expect(registerScript).not.toContain('console.log(cookie');
     expect(hostScript).toContain('read -rsp "$prompt"');
     expect(hostScript).toContain('docker exec -i');
+    expect(hostScript).toContain('/app/scripts/run-console-live-readonly-host.sh');
+    expect(hostScript).toContain('XACTIONS_LIVE_READONLY_SOURCE=existing bash /tmp/xactions-live-readonly.sh');
     expect(docs).toContain('register-console-live-accounts-host.sh');
     expect(docs).toContain("XACTIONS_LIVE_READONLY_SOURCE='existing'");
   });
