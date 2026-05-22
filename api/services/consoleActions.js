@@ -1,3 +1,5 @@
+import { getFeatureById, getFeatureHistoryTypes } from '../config/features.js';
+
 const hiddenConfigKeys = new Set([
   'comment',
   'comments',
@@ -79,7 +81,12 @@ function operationMatchesFeatureHistory(operation, featureId) {
     return operation.type === 'targetEngage';
   }
 
-  return true;
+  const sourceFeatureId = operation.config?.sourceFeatureId;
+  if (sourceFeatureId) return sourceFeatureId === featureId;
+
+  const feature = getFeatureById(featureId);
+  const historyTypes = getFeatureHistoryTypes(feature);
+  return historyTypes.includes(operation.type);
 }
 
 function createActionPayload(feature, inputConfig, mode = 'dryRun', user = {}) {

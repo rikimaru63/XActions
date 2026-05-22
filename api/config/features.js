@@ -682,6 +682,7 @@ const features = [
     operationType: 'getLiveSpaces',
     queueType: 'getLiveSpaces',
     consoleAction: 'getSpaces',
+    historyTypes: ['getLiveSpaces', 'getScheduledSpaces', 'scrapeSpace'],
     authRequired: true,
     accountRequired: true,
     supportsDryRun: true,

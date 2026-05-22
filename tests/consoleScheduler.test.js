@@ -782,6 +782,45 @@ describe('console scheduler helpers', () => {
     }, 'sendDM')).toBe(false);
   });
 
+  it('filters feature history by source feature when available', () => {
+    expect(operationMatchesFeatureHistory({
+      type: 'postTweet',
+      config: { sourceFeatureId: 'postTweet' },
+    }, 'postTweet')).toBe(true);
+
+    expect(operationMatchesFeatureHistory({
+      type: 'postTweet',
+      config: { sourceFeatureId: 'schedulePost' },
+    }, 'postTweet')).toBe(false);
+
+    expect(operationMatchesFeatureHistory({
+      type: 'postTweet',
+      config: { sourceFeatureId: 'postTweet' },
+    }, 'schedulePost')).toBe(false);
+
+    expect(operationMatchesFeatureHistory({
+      type: 'postTweet',
+      config: {},
+    }, 'schedulePost')).toBe(true);
+  });
+
+  it('keeps all Spaces execution variants in the Spaces history filter', () => {
+    const spaces = getFeatureById('spaces');
+    expect(spaces.historyTypes).toEqual(['getLiveSpaces', 'getScheduledSpaces', 'scrapeSpace']);
+
+    for (const type of spaces.historyTypes) {
+      expect(operationMatchesFeatureHistory({
+        type,
+        config: { sourceFeatureId: 'spaces' },
+      }, 'spaces')).toBe(true);
+    }
+
+    expect(operationMatchesFeatureHistory({
+      type: 'getLiveSpaces',
+      config: { sourceFeatureId: 'bookmarks' },
+    }, 'spaces')).toBe(false);
+  });
+
   it('detects X session expiration errors', () => {
     expect(isSessionExpiredError(new Error('Session expired - please reconnect your X account'))).toBe(true);
     expect(isSessionExpiredError('X連携情報でログイン状態を確認できませんでした。')).toBe(true);

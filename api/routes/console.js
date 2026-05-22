@@ -111,6 +111,34 @@ function configFromOperation(featureId, operationConfig = {}, overrideConfig = {
   return config;
 }
 
+function addHistoryAnd(where, clause) {
+  where.AND = [...(where.AND || []), clause];
+}
+
+function addFeatureHistoryConfigFilter(where, featureId) {
+  if (!featureId) return;
+
+  if (featureId === 'sendDM') {
+    addHistoryAnd(where, {
+      OR: [
+        { type: 'sendDM' },
+        { config: { contains: '"sourceFeatureId":"sendDM"' } },
+        { config: { contains: '"hasMessage":true' } },
+        { config: { contains: '"hasDmMessage":true' } },
+      ],
+    });
+    return;
+  }
+
+  addHistoryAnd(where, {
+    OR: [
+      { config: { contains: `"sourceFeatureId":"${featureId}"` } },
+      { config: null },
+      { config: { not: { contains: '"sourceFeatureId":' } } },
+    ],
+  });
+}
+
 async function queueConsoleOperations({ user, feature, payload, accountIds, mode, retryOf = null, retryConfig = null }) {
   const batchId = accountIds.length > 1 || retryOf ? randomUUID() : null;
   let parentOperation = null;
@@ -206,6 +234,7 @@ router.get('/history', async (req, res) => {
       if (types.length === 1) where.type = types[0];
       if (types.length > 1) where.type = { in: types };
       sourceFeatureId = feature.id;
+      addFeatureHistoryConfigFilter(where, sourceFeatureId);
     }
 
     if (status) where.status = String(status);
@@ -272,7 +301,7 @@ router.get('/history', async (req, res) => {
         },
       },
       orderBy: { createdAt: 'desc' },
-      take: sourceFeatureId === 'sendDM' ? Math.min(limit * 3, 100) : limit,
+      take: limit,
     });
 
     const sanitized = operations
