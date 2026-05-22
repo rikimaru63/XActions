@@ -702,6 +702,7 @@ worker未実装のjob typeはUIで `準備中` にせず、実装してから `�
 api="$(docker ps --format '{{.Names}}' | grep '^api-sg008w80csw08skkwcwswwgw' | head -n 1)"
 docker cp "$api":/app/scripts/run-console-live-readonly-host.sh /tmp/xactions-live-readonly.sh
 XACTIONS_LIVE_READONLY_SOURCE='existing' bash /tmp/xactions-live-readonly.sh
+docker exec "$api" npm run audit:console-acceptance:live
 ```
 
 Cookieから登録する場合は、次の手順書を使う。

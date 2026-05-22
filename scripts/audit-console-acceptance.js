@@ -56,6 +56,7 @@ function auditStaticAcceptance() {
   const catalogAudit = read('scripts/audit-console-catalog.js');
   const liveAccountRegistration = read('scripts/register-console-live-accounts.js');
   const liveAccountRegistrationHost = read('scripts/register-console-live-accounts-host.sh');
+  const liveAcceptanceWrapper = read('scripts/audit-console-acceptance-live.js');
   const liveSmokeDocs = read('docs/console-live-smoke.md');
   const workerRestartHost = read('scripts/smoke-console-worker-restart-host.sh');
   const productionSmoke = read('scripts/smoke-console-production-host.sh');
@@ -165,13 +166,15 @@ function auditStaticAcceptance() {
   ]);
 
   const liveAccountRegistrationMissing = hasAll(
-    liveAccountRegistration + liveAccountRegistrationHost + liveSmokeDocs + JSON.stringify(pkg.scripts || {}),
+    liveAccountRegistration + liveAccountRegistrationHost + liveAcceptanceWrapper + liveSmokeDocs + JSON.stringify(pkg.scripts || {}),
     [
       'register:console-live-accounts',
+      'audit:console-acceptance:live',
       'for await (const chunk of process.stdin)',
       'verifySessionCookie(account.cookie)',
       'encryptedCookie: encrypt(account.cookie)',
       'evaluateLiveReadiness',
+      "XACTIONS_ACCEPTANCE_REQUIRE_LIVE = 'true'",
       'read -rsp "$prompt"',
       'docker exec -i',
       'register-console-live-accounts-host.sh',

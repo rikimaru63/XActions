@@ -70,6 +70,11 @@ XACTIONS_LIVE_READONLY_SOURCE='diagnose' bash /tmp/xactions-live-readonly.sh
 ```
 `diagnose` output includes `readiness.nextAction`, `requiredAccounts`, and `remainingAccounts`; follow that next action before rerunning the live smoke.
 
+Run the final completion gate after two live accounts are ready:
+```bash
+docker exec "$api" npm run audit:console-acceptance:live
+```
+
 ## 既存XAccountを明示する
 
 `/console` から実Xアカウントを2つ登録済みなら、Cookieを渡さずにアカウントIDだけで同じsmokeを実行できます。この場合、既存アカウント自体は削除されず、テスト中に作成した予約、実行履歴、Operationだけを削除します。

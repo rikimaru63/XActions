@@ -313,21 +313,26 @@ describe('console scheduler helpers', () => {
     const pkg = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
     const registerScript = readFileSync(new URL('../scripts/register-console-live-accounts.js', import.meta.url), 'utf8');
     const hostScript = readFileSync(new URL('../scripts/register-console-live-accounts-host.sh', import.meta.url), 'utf8');
+    const liveAcceptance = readFileSync(new URL('../scripts/audit-console-acceptance-live.js', import.meta.url), 'utf8');
     const docs = readFileSync(new URL('../docs/console-live-smoke.md', import.meta.url), 'utf8');
 
     expect(pkg.scripts['register:console-live-accounts']).toBe('node scripts/register-console-live-accounts.js');
+    expect(pkg.scripts['audit:console-acceptance:live']).toBe('node scripts/audit-console-acceptance-live.js');
     expect(registerScript).toContain('for await (const chunk of process.stdin)');
     expect(registerScript).toContain('verifySessionCookie(account.cookie)');
     expect(registerScript).toContain('encryptedCookie: encrypt(account.cookie)');
     expect(registerScript).toContain('evaluateLiveReadiness');
     expect(registerScript).not.toContain('console.log(account.cookie');
     expect(registerScript).not.toContain('console.log(cookie');
+    expect(liveAcceptance).toContain("XACTIONS_ACCEPTANCE_REQUIRE_LIVE = 'true'");
+    expect(liveAcceptance).toContain("import('./audit-console-acceptance.js')");
     expect(hostScript).toContain('read -rsp "$prompt"');
     expect(hostScript).toContain('docker exec -i');
     expect(hostScript).toContain('/app/scripts/run-console-live-readonly-host.sh');
     expect(hostScript).toContain('XACTIONS_LIVE_READONLY_SOURCE=existing bash /tmp/xactions-live-readonly.sh');
     expect(docs).toContain('register-console-live-accounts-host.sh');
     expect(docs).toContain("XACTIONS_LIVE_READONLY_SOURCE='existing'");
+    expect(docs).toContain('npm run audit:console-acceptance:live');
   });
 
   it('shows skipped run-now results and opens the run history', () => {
