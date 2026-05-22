@@ -229,6 +229,29 @@ describe('console scheduler helpers', () => {
       smokeUsername: 'smoke',
     }).ready).toBe(true);
 
+    const missingAccounts = evaluateLiveReadiness({
+      env: {},
+      user,
+      activeAccounts: [],
+      smokeUsername: 'smoke',
+    });
+    expect(missingAccounts).toMatchObject({
+      ready: false,
+      requiredAccounts: 2,
+      remainingAccounts: 2,
+    });
+    expect(missingAccounts.nextAction).toContain('Register 2 more active XAccounts');
+
+    const existingAvailable = evaluateLiveReadiness({
+      env: {},
+      user,
+      activeAccounts,
+      smokeUsername: 'smoke',
+    });
+    expect(existingAvailable.ready).toBe(false);
+    expect(existingAvailable.remainingAccounts).toBe(0);
+    expect(existingAvailable.nextAction).toContain('SOURCE=existing');
+
     const duplicateCookies = evaluateLiveReadiness({
       env: {
         XACTIONS_LIVE_ACCOUNT_A_COOKIE: 'auth_token=a',
@@ -240,6 +263,7 @@ describe('console scheduler helpers', () => {
     });
     expect(duplicateCookies.ready).toBe(false);
     expect(duplicateCookies.reasons.join(' ')).toContain('must be different');
+    expect(duplicateCookies.nextAction).toContain('different X cookies');
 
     const byIds = evaluateLiveReadiness({
       env: { XACTIONS_LIVE_ACCOUNT_IDS: 'acc_1,acc_2' },
@@ -249,6 +273,7 @@ describe('console scheduler helpers', () => {
     });
     expect(byIds.ready).toBe(true);
     expect(byIds.readyWithExistingAccounts).toBe(true);
+    expect(byIds.nextAction).toContain('Run smoke:console-live-readonly');
 
     const mixedSelectors = evaluateLiveReadiness({
       env: {
@@ -261,6 +286,7 @@ describe('console scheduler helpers', () => {
     });
     expect(mixedSelectors.ready).toBe(false);
     expect(mixedSelectors.reasons.join(' ')).toContain('Use only one existing-account selector');
+    expect(mixedSelectors.nextAction).toContain('Use only one existing-account selector');
   });
 
   it('auto-runs the host live readonly smoke when two active XAccounts exist', () => {

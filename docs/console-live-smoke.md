@@ -68,6 +68,7 @@ bash /tmp/xactions-live-readonly.sh
 ```bash
 XACTIONS_LIVE_READONLY_SOURCE='diagnose' bash /tmp/xactions-live-readonly.sh
 ```
+`diagnose` output includes `readiness.nextAction`, `requiredAccounts`, and `remainingAccounts`; follow that next action before rerunning the live smoke.
 
 ## 既存XAccountを明示する
 

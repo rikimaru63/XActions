@@ -580,9 +580,6 @@ async function auditLiveReadiness() {
     return {
       checked: true,
       ...readiness,
-      nextAction: readiness.ready
-        ? 'Run smoke:console-live-readonly with existing accounts.'
-        : 'Register two active XAccounts or provide two live cookies, then run smoke:console-live-readonly.',
     };
   } finally {
     await prisma.$disconnect();

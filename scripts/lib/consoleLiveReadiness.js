@@ -77,6 +77,58 @@ export function shouldUseExistingAccounts(env = process.env) {
     || parsed.useExisting;
 }
 
+function plural(value, noun) {
+  return `${value} ${noun}${value === 1 ? '' : 's'}`;
+}
+
+function liveReadinessNextAction({
+  ready,
+  user,
+  smokeUsername,
+  profileTarget,
+  requireProfileTarget,
+  parsed,
+  readyWithExistingAccounts,
+  activeAccounts,
+  requiredAccounts,
+  remainingAccounts,
+}) {
+  if (ready) {
+    return 'Run smoke:console-live-readonly using the selected live account source.';
+  }
+  if (!user) {
+    return `Create or verify the smoke user (${smokeUsername}), then rerun SOURCE=diagnose.`;
+  }
+  if (requireProfileTarget && !profileTarget) {
+    return 'Set XACTIONS_LIVE_PROFILE_TARGET, then rerun SOURCE=diagnose.';
+  }
+  if (parsed.liveCookies[0] && parsed.liveCookies[1] && parsed.liveCookies[0] === parsed.liveCookies[1]) {
+    return 'Provide two different X cookies in XACTIONS_LIVE_ACCOUNT_A_COOKIE and XACTIONS_LIVE_ACCOUNT_B_COOKIE.';
+  }
+  if (parsed.selectorCount > 1) {
+    return 'Use only one existing-account selector: account IDs, usernames, or XACTIONS_LIVE_USE_EXISTING_ACCOUNTS.';
+  }
+  if (parsed.liveCookies.some(Boolean) && !parsed.readyWithCookies) {
+    return 'Provide both live cookies, or remove cookie env vars and select two existing active XAccounts.';
+  }
+  if (parsed.selectorCount === 1 && !readyWithExistingAccounts) {
+    if (parsed.requestedIds.length > 0 && parsed.requestedIds.length !== requiredAccounts) {
+      return `Select exactly ${requiredAccounts} active XAccount IDs.`;
+    }
+    if (parsed.requestedUsernames.length > 0 && parsed.requestedUsernames.length !== requiredAccounts) {
+      return `Select exactly ${requiredAccounts} active XAccount usernames.`;
+    }
+    if (activeAccounts.length < requiredAccounts) {
+      return `Register ${plural(remainingAccounts, 'more active XAccount')} with scripts/register-console-live-accounts-host.sh, then run SOURCE=existing.`;
+    }
+    return 'Verify the selected XAccounts are active for the smoke user, then rerun SOURCE=diagnose.';
+  }
+  if (activeAccounts.length >= requiredAccounts) {
+    return 'Run XACTIONS_LIVE_READONLY_SOURCE=existing bash /tmp/xactions-live-readonly.sh.';
+  }
+  return `Register ${plural(remainingAccounts, 'more active XAccount')} with scripts/register-console-live-accounts-host.sh or provide two live cookies.`;
+}
+
 export function evaluateLiveReadiness({
   env = process.env,
   user,
@@ -86,6 +138,8 @@ export function evaluateLiveReadiness({
   requireProfileTarget = false,
 }) {
   const parsed = parseLiveReadinessEnv(env);
+  const requiredAccounts = 2;
+  const remainingAccounts = Math.max(requiredAccounts - activeAccounts.length, 0);
   const activeIds = new Set(activeAccounts.map((account) => account.id));
   const activeUsernames = new Set(activeAccounts.map((account) => String(account.username || '').toLowerCase()));
   const readyWithIds = parsed.requestedIds.length === 2
@@ -114,6 +168,18 @@ export function evaluateLiveReadiness({
       && (!requireProfileTarget || profileTarget)
       && (parsed.readyWithCookies || readyWithExistingAccounts)
   );
+  const nextAction = liveReadinessNextAction({
+    ready,
+    user,
+    smokeUsername,
+    profileTarget,
+    requireProfileTarget,
+    parsed,
+    readyWithExistingAccounts,
+    activeAccounts,
+    requiredAccounts,
+    remainingAccounts,
+  });
 
   return {
     smokeUsername,
@@ -123,6 +189,8 @@ export function evaluateLiveReadiness({
     existingSelectors: existingSelectorSummary(parsed),
     activeXAccounts: activeAccounts.length,
     verifiedActiveXAccounts: activeAccounts.filter((account) => account.lastVerifiedAt).length,
+    requiredAccounts,
+    remainingAccounts,
     accounts: activeAccounts.map((account) => ({
       id: account.id,
       username: account.username,
@@ -135,5 +203,6 @@ export function evaluateLiveReadiness({
     readyWithExistingAccounts,
     ready,
     reasons,
+    nextAction,
   };
 }
