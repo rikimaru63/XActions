@@ -683,13 +683,14 @@ worker未実装のjob typeはUIで `準備中` にせず、実装してから `�
 - pause / resume / run-now
 - scheduler loop
 - stale lock recovery
-- worker restart recovery smoke（最新本番 `392a972` で確認済み）
+- production smoke（直近本番で確認済み）
+- worker restart recovery smoke（直近本番で確認済み）
 - live action確認モーダル
 - queue payloadからcookie / token / DM本文を除外
 - legacy DM履歴の本文redaction
 - legacy operation responseのredaction
 - headless Chromium smoke
-- Coolify本番デプロイ（最新本番 `392a972`）
+- Coolify本番デプロイ（直近本番で確認済み）
 
 2026-05-22時点で残っている完了ゲート。
 
