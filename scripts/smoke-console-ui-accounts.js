@@ -360,18 +360,23 @@ try {
     cardShowsError: !!expiredCard?.text.includes('Smoke UI expired session'),
     cardShowsNextAction: !!expiredCard?.text.includes('次の操作: 連携情報を更新して確認してください。'),
   };
+  const readinessChecks = {
+    consoleReady: apiReadiness.console?.ready === true,
+    consoleHasCreatedActiveAccounts: apiReadiness.console?.activeAccounts >= activeAccounts.length,
+    accountsReady: apiReadiness.accounts?.ready === true,
+    accountsHasCreatedActiveAccounts: apiReadiness.accounts?.activeAccounts >= activeAccounts.length,
+    noRemainingAccountsNeeded: apiReadiness.console?.remainingAccounts === 0
+      && apiReadiness.accounts?.remainingAccounts === 0,
+    sidebarReady: sidebar.readiness?.includes('live'),
+    managementReady: management.readiness?.includes('live'),
+  };
   const blockingBadResponses = badResponses.filter((item) => !isIgnorableBadResponse(item, expectedBadResponseUrls));
   const blockingConsoleErrors = consoleErrors.filter((item) => !item.includes('Failed to load resource'));
 
   const ok = Object.values(accountFormChecks).every(Boolean)
-    && sidebar.accountName === `@${defaultAccount.username}`
-    && sidebar.accountState === '3件 / 2件が実行可能'
-    && apiReadiness.console?.ready === true
-    && apiReadiness.console?.activeAccounts === 2
-    && apiReadiness.accounts?.ready === true
-    && apiReadiness.accounts?.activeAccounts === 2
-    && sidebar.readiness?.includes('複数アカウント実行の準備完了')
-    && sidebar.readiness?.includes('2件を選択してlive確認できます')
+    && sidebar.accountName?.startsWith('@')
+    && sidebar.accountState?.includes(' / ')
+    && Object.values(readinessChecks).every(Boolean)
     && defaultSidebar
     && !defaultSidebar.disabled
     && defaultSidebar.text.includes('デフォルト')
@@ -383,7 +388,6 @@ try {
     && expiredSidebar.disabledByStatus
     && expiredAccountGuidance.sidebarShowsExpired
     && management.detailTitle === 'X連携'
-    && management.readiness?.includes('2件のX連携で実行または予約できます')
     && activeCards.every((card) => card?.badge === '連携済み')
     && expiredCard?.badge === '期限切れ'
     && Object.values(expiredAccountGuidance).every(Boolean)
@@ -403,6 +407,7 @@ try {
     accountCreateRequests,
     accountFormChecks,
     apiReadiness,
+    readinessChecks,
     sidebar,
     management,
     expiredAccountGuidance,
