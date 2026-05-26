@@ -283,12 +283,22 @@ try {
   const secondaryAccount = activeAccounts.find((account) => !account.isDefault);
   const selectedAccountIds = accountIdSet(activeAccounts.map((account) => account.id));
 
-  await page.click(`#account-list [data-account-sidebar-choice][value="${secondaryAccount.id}"]`);
-  await page.waitForFunction(
-    (id) => document.querySelector(`#account-list [data-account-sidebar-choice][value="${id}"]`)?.checked,
-    {},
-    secondaryAccount.id
-  );
+  for (const accountId of selectedAccountIds) {
+    await page.evaluate((desiredIds) => {
+      document.querySelectorAll('#account-list [data-account-sidebar-choice]:checked').forEach((input) => {
+        if (!desiredIds.includes(input.value)) input.click();
+      });
+    }, selectedAccountIds);
+    await page.evaluate((id) => {
+      const input = document.querySelector(`#account-list [data-account-sidebar-choice][value="${id}"]`);
+      if (input && !input.checked) input.click();
+    }, accountId);
+    await page.waitForFunction(
+      (id) => document.querySelector(`#account-list [data-account-sidebar-choice][value="${id}"]`)?.checked,
+      {},
+      accountId
+    );
+  }
   await page.click('.tabs [data-tab="schedule"]');
   await page.waitForFunction(() => document.querySelector('.tabs [data-tab="schedule"]')?.classList.contains('active'));
   await page.click('.tabs [data-tab="history"]');
