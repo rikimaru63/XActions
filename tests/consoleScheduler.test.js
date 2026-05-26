@@ -397,11 +397,14 @@ describe('console scheduler helpers', () => {
     expect(payload.operationType).toBe('sendDM');
     expect(payload.operationConfig).toMatchObject({
       sourceFeatureId: 'sendDM',
-      username: 'target_user',
+      recipientCount: 1,
       hasMessage: true,
       messageLength: 5,
     });
     expect(payload.operationConfig.message).toBeUndefined();
+    expect(payload.operationConfig.username).toBeUndefined();
+    expect(payload.jobConfig.usernames).toEqual(['target_user']);
+    expect(payload.jobConfig.username).toBe('target_user');
     expect(payload.jobConfig.message).toBe('hello');
   });
 
@@ -648,12 +651,10 @@ describe('console scheduler helpers', () => {
       },
     });
 
-    expect(sendDmJobData.config).toEqual({
-      username: 'target_user',
-      dryRun: false,
-    });
+    expect(sendDmJobData.config).toEqual({ dryRun: false });
     expect(sendDmJobData.encryptedJobConfig).toBeTruthy();
     expect(JSON.stringify(sendDmJobData)).not.toContain('private dm body');
+    expect(JSON.stringify(sendDmJobData)).not.toContain('target_user');
     expect(restoreQueueJobConfig(sendDmJobData)).toMatchObject({
       username: 'target_user',
       message: 'private dm body',
@@ -1044,14 +1045,20 @@ describe('console scheduler helpers', () => {
 
   it('keeps DM sending focused and caps user-authored DM bodies server-side', () => {
     const sendDm = getFeatureById('sendDM');
-    expect(sendDm.fields.map((field) => field.key)).toEqual(['username', 'message']);
+    expect(sendDm.fields.map((field) => field.key)).toEqual(['usernames', 'message']);
+    expect(sendDm.fields.find((field) => field.key === 'usernames')).toMatchObject({
+      type: 'usernameList',
+      source: 'newFollowers',
+    });
 
     const longMessage = '長'.repeat(numberFieldMax('sendDM', 'message') + 50);
     const payload = createActionPayload(
       sendDm,
-      { username: '@target_user', message: longMessage },
+      { usernames: '@target_user\n@second_user\n@target_user', message: longMessage },
       'live'
     );
+    expect(payload.operationConfig.recipientCount).toBe(2);
+    expect(payload.jobConfig.usernames).toEqual(['target_user', 'second_user']);
     expect(payload.operationConfig.messageLength).toBe(numberFieldMax('sendDM', 'message'));
     expect(payload.jobConfig.message).toHaveLength(numberFieldMax('sendDM', 'message'));
 
@@ -1061,6 +1068,17 @@ describe('console scheduler helpers', () => {
       'live'
     );
     expect(engage.jobConfig.dmMessage).toHaveLength(numberFieldMax('targetEngage', 'dmMessage'));
+  });
+
+  it('surfaces new follower candidates for DM recipient selection', () => {
+    const html = readFileSync(new URL('../dashboard/console.html', import.meta.url), 'utf8');
+    const route = readFileSync(new URL('../api/routes/console.js', import.meta.url), 'utf8');
+
+    expect(html).toContain('data-load-dm-candidates');
+    expect(html).toContain('/console/dm-recipient-candidates?limit=50');
+    expect(html).toContain('data-dm-candidate');
+    expect(route).toContain("router.get('/dm-recipient-candidates'");
+    expect(route).toContain("type: 'gained'");
   });
 
   it('connects growth actions with safe console payloads', () => {
@@ -1094,6 +1112,18 @@ describe('console scheduler helpers', () => {
     });
     expect(commentPayload.operationConfig.comment).toBeUndefined();
     expect(commentPayload.jobConfig.comment).toBe('確認用コメント');
+
+    const engagersPayload = createActionPayload(
+      getFeatureById('followEngagers'),
+      { tweetUrl: 'https://x.com/source/status/123', engagementType: 'likes', maxFollows: 2, likeLatestPost: true },
+      'live'
+    );
+    expect(engagersPayload.operationConfig).toMatchObject({
+      engagementType: 'likes',
+      maxFollows: 2,
+      likeLatestPost: true,
+    });
+    expect(engagersPayload.jobConfig.likeLatestPost).toBe(true);
   });
 
   it('connects read-only collection actions to the console catalog', () => {

@@ -703,6 +703,16 @@ function tweetUrlFromConfig(config) {
   throw new Error('tweetId or tweetUrl is required');
 }
 
+function normalizeDmRecipients(config = {}) {
+  const value = config.usernames || config.recipients || config.username || '';
+  const raw = Array.isArray(value) ? value.join('\n') : String(value || '');
+  return [...new Set(raw
+    .split(/[\s,、，]+/)
+    .map((item) => String(item || '').trim().replace(/^@/, '').replace(/[^a-zA-Z0-9_]/g, ''))
+    .filter(Boolean))]
+    .slice(0, 50);
+}
+
 function parseSocialCount(value) {
   if (typeof value === 'number') return Number.isFinite(value) ? value : 0;
   const text = String(value || '').replace(/,/g, '').trim();
@@ -1607,7 +1617,34 @@ operationsQueue.process('sendDM', 1, async (job) => {
       await browserAutomation.navigateToTwitter(page);
       const isAuthenticated = await browserAutomation.checkAuthentication(page);
       if (!isAuthenticated) throw new Error('Session expired - please reconnect your X account');
-      return await browserAutomation.sendDM(page, config.username, config.message);
+      const recipients = normalizeDmRecipients(config);
+      if (!recipients.length) throw new Error('DM recipient is required');
+
+      const sent = [];
+      const failed = [];
+      for (const [index, username] of recipients.entries()) {
+        if (isJobCancelled(job.data.operationId)) break;
+
+        await job.progress(`Sending DM ${index + 1}/${recipients.length} to @${username}`);
+        const result = await browserAutomation.sendDM(page, username, config.message);
+        if (result.success) {
+          sent.push({ username, sent: true });
+        } else {
+          failed.push({ username, error: result.error || 'DM failed' });
+        }
+
+        if (index < recipients.length - 1) {
+          await browserAutomation.randomDelay(3000, 6000);
+        }
+      }
+
+      return {
+        success: failed.length === 0,
+        totalRecipients: recipients.length,
+        sent,
+        failed,
+        cancelled: isJobCancelled(job.data.operationId),
+      };
     } finally {
       await page.close();
     }

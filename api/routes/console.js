@@ -66,7 +66,7 @@ function configFromOperation(featureId, operationConfig = {}, overrideConfig = {
 
   if (featureId === 'sendDM') {
     return {
-      username: config.username || config.targetUsername,
+      usernames: config.usernames || config.recipients || config.username || config.targetUsername,
       message: config.message || config.dmMessage,
       delayMs: config.delayMs,
     };
@@ -246,6 +246,50 @@ router.get('/history', async (req, res) => {
   } catch (error) {
     console.error('Console history error:', error);
     res.status(500).json({ error: '履歴を取得できませんでした。' });
+  }
+});
+
+router.get('/dm-recipient-candidates', async (req, res) => {
+  try {
+    const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 50, 1), 100);
+    const changes = await prisma.followerChange.findMany({
+      where: {
+        userId: req.user.id,
+        type: 'gained',
+      },
+      orderBy: { detectedAt: 'desc' },
+      take: limit * 3,
+      select: {
+        id: true,
+        username: true,
+        name: true,
+        avatarUrl: true,
+        detectedAt: true,
+      },
+    });
+
+    const seen = new Set();
+    const candidates = [];
+    for (const change of changes) {
+      const username = String(change.username || '').replace(/^@/, '').trim();
+      const key = username.toLowerCase();
+      if (!username || seen.has(key)) continue;
+      seen.add(key);
+      candidates.push({
+        id: change.id,
+        username,
+        name: change.name,
+        avatarUrl: change.avatarUrl,
+        detectedAt: change.detectedAt,
+        source: 'newFollower',
+      });
+      if (candidates.length >= limit) break;
+    }
+
+    res.json({ candidates });
+  } catch (error) {
+    console.error('DM recipient candidate error:', error);
+    res.status(500).json({ error: '送信先候補を取得できませんでした。' });
   }
 });
 

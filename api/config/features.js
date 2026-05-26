@@ -80,7 +80,7 @@ const features = [
     riskLevel: 'high',
     status: 'available',
     fields: [
-      { key: 'username', label: '送信先', type: 'username', required: true, placeholder: '@username' },
+      { key: 'usernames', label: '送信先リスト', type: 'usernameList', required: true, placeholder: '@username\n@username2', source: 'newFollowers' },
       { key: 'message', label: '本文', type: 'textarea', required: true, max: 1000 },
     ],
   },
@@ -204,6 +204,7 @@ const features = [
         ],
       },
       { key: 'maxFollows', label: 'フォロー上限', type: 'number', min: 1, max: 50, default: 10 },
+      { key: 'likeLatestPost', label: 'フォロー後に最新ポストへLike', type: 'boolean', default: false },
     ],
   },
   {

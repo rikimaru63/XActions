@@ -11,15 +11,27 @@ const hiddenConfigKeys = new Set([
   'previews',
   'question',
   'questionPreview',
+  'recipients',
+  'recipientPreview',
   'sessionCookie',
   'text',
   'textPreview',
   'token',
   'tweets',
+  'usernames',
 ]);
 
 function normalizeUsername(username = '') {
   return String(username).trim().replace(/^@/, '').replace(/[^a-zA-Z0-9_]/g, '');
+}
+
+function normalizeUsernameList(value = '') {
+  const raw = Array.isArray(value) ? value.join('\n') : String(value || '');
+  return [...new Set(raw
+    .split(/[\s,、，]+/)
+    .map((item) => normalizeUsername(item))
+    .filter(Boolean))]
+    .slice(0, 50);
 }
 
 function asBool(value) {
@@ -136,22 +148,23 @@ function createActionPayload(feature, inputConfig, mode = 'dryRun', user = {}) {
         throw new Error('DM送信は確認のみには対応していません。実行を選んでください。');
       }
 
-      const targetUsername = normalizeUsername(config.username);
+      const usernames = normalizeUsernameList(config.usernames || config.recipients || config.username);
       const dmMessage = String(config.message || '').trim().slice(0, MAX_DM_MESSAGE_LENGTH);
 
-      if (!targetUsername) throw new Error('送信先を入力してください。');
+      if (!usernames.length) throw new Error('送信先を入力してください。');
       if (!dmMessage) throw new Error('本文を入力してください。');
 
       return {
         operationType: 'sendDM',
         operationConfig: {
           sourceFeatureId: feature.id,
-          username: targetUsername,
+          recipientCount: usernames.length,
           hasMessage: true,
           messageLength: dmMessage.length,
         },
         jobConfig: {
-          username: targetUsername,
+          usernames,
+          username: usernames[0],
           message: dmMessage,
           dryRun: false,
         },
@@ -263,6 +276,7 @@ function createActionPayload(feature, inputConfig, mode = 'dryRun', user = {}) {
       const tweetUrl = String(config.tweetUrl || '').trim();
       const engagementType = String(config.engagementType || '').trim() === 'retweets' ? 'retweets' : 'likes';
       const maxFollows = asNumber(config.maxFollows, 10, 1, 50);
+      const likeLatestPost = asBool(config.likeLatestPost);
       if (!tweetUrl) throw new Error('ポストURLを入力してください。');
 
       return {
@@ -272,12 +286,14 @@ function createActionPayload(feature, inputConfig, mode = 'dryRun', user = {}) {
           tweetUrl,
           engagementType,
           maxFollows,
+          likeLatestPost,
           dryRun,
         },
         jobConfig: {
           tweetUrl,
           engagementType,
           maxFollows,
+          likeLatestPost,
           dryRun,
         },
       };

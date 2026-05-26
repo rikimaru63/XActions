@@ -22,7 +22,7 @@ const encryptedConfigKeysByType = new Map([
   ['priceCorrelation', ['tweets']],
   ['replyToTweet', ['text']],
   ['runWorkflow', ['context']],
-  ['sendDM', ['message']],
+  ['sendDM', ['message', 'username', 'usernames', 'recipients']],
   ['targetEngage', ['dmMessage']],
 ]);
 

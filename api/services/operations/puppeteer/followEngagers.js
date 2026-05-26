@@ -23,6 +23,7 @@ async function followEngagersBrowser(userId, config, updateProgress, isCancelled
       engagementType = 'likes', // 'likes' or 'retweets'
       maxFollows = 50,
       dryRun = false,
+      likeLatestPost = false,
       whitelist = []
     } = config;
 
@@ -56,6 +57,7 @@ async function followEngagersBrowser(userId, config, updateProgress, isCancelled
     );
 
     const followed = [];
+    const liked = [];
     const failed = [];
     const limit = Math.min(filteredEngagers.length, maxFollows);
 
@@ -78,9 +80,38 @@ async function followEngagersBrowser(userId, config, updateProgress, isCancelled
             displayName: user.displayName,
             alreadyFollowing: result.alreadyFollowing || false
           });
+
+          if (likeLatestPost) {
+            updateProgress(`Liking latest post from @${user.username} (${i + 1}/${limit})`);
+            const tweets = await browserAutomation.getUserTweets(page, user.username, 1);
+            const tweet = tweets[0];
+            if (tweet?.url) {
+              const likeResult = await browserAutomation.likePost(page, tweet.url);
+              if (likeResult.success) {
+                liked.push({
+                  username: user.username,
+                  url: tweet.url,
+                  alreadyLiked: !!likeResult.alreadyLiked,
+                });
+              } else {
+                failed.push({
+                  username: user.username,
+                  action: 'like',
+                  error: likeResult.error || 'Like failed',
+                });
+              }
+            } else {
+              failed.push({
+                username: user.username,
+                action: 'like',
+                error: 'Latest post not found',
+              });
+            }
+          }
         } else {
           failed.push({
             username: user.username,
+            action: 'follow',
             error: result.error
           });
         }
@@ -105,12 +136,19 @@ async function followEngagersBrowser(userId, config, updateProgress, isCancelled
           displayName: user.displayName,
           dryRun: true
         });
+        if (likeLatestPost) {
+          liked.push({
+            username: user.username,
+            dryRun: true,
+          });
+        }
       }
     }
 
     return {
       success: true,
       followed,
+      liked,
       failed,
       totalEngagers: engagers.length,
       totalProcessed: followed.length + failed.length,

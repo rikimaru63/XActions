@@ -540,6 +540,23 @@
       min-height: 38px;
     }
 
+    .recipient-candidates {
+      display: grid;
+      gap: 8px;
+      margin-top: 8px;
+    }
+
+    .recipient-candidate-actions {
+      display: flex;
+      gap: 8px;
+      margin-top: 8px;
+    }
+
+    .recipient-candidate-actions button {
+      min-height: 36px;
+      padding: 0 12px;
+    }
+
     .mode {
       display: grid;
       grid-template-columns: 1fr 1fr;
@@ -1000,6 +1017,17 @@
       return el.value;
     }
 
+    function usernameList(value = '') {
+      return [...new Set(String(value || '')
+        .split(/[\s,、，]+/)
+        .map((item) => item.trim().replace(/^@/, '').replace(/[^a-zA-Z0-9_]/g, ''))
+        .filter(Boolean))];
+    }
+
+    function setUsernameList(textarea, usernames) {
+      textarea.value = usernameList(usernames.join('\n')).map((item) => `@${item}`).join('\n');
+    }
+
     function collectConfig(selected) {
       const config = {};
       for (const field of selected.fields || []) {
@@ -1439,6 +1467,18 @@
           </div>
         `;
       }
+      if (field.type === 'usernameList') {
+        return `
+          <div class="field">
+            <label for="field-${escapeHtml(field.key)}">${escapeHtml(field.label)}</label>
+            <textarea id="field-${escapeHtml(field.key)}" data-field="${escapeHtml(field.key)}" placeholder="${escapeHtml(field.placeholder || '')}"></textarea>
+            <div class="recipient-candidate-actions">
+              <button type="button" data-load-dm-candidates>新規フォロワー候補</button>
+            </div>
+            <div class="recipient-candidates" id="dm-recipient-candidates"></div>
+          </div>
+        `;
+      }
       if (field.type === 'select') {
         const options = field.options || [];
         return `
@@ -1495,6 +1535,49 @@
       `;
     }
 
+    function renderDmCandidateList(container, candidates) {
+      if (!container) return;
+      if (!candidates.length) {
+        container.innerHTML = '<div class="empty">新規フォロワー候補はありません。</div>';
+        return;
+      }
+      container.innerHTML = `
+        <div class="check-list">
+          ${candidates.map((candidate) => `
+            <label class="check">
+              <span>@${escapeHtml(candidate.username)}${candidate.name ? ` / ${escapeHtml(candidate.name)}` : ''}</span>
+              <input type="checkbox" data-dm-candidate="${escapeHtml(candidate.username)}">
+            </label>
+          `).join('')}
+        </div>
+      `;
+    }
+
+    async function loadDmRecipientCandidates(scope) {
+      const list = scope.querySelector('#dm-recipient-candidates');
+      if (!list) return;
+      list.innerHTML = '<div class="empty">読み込み中...</div>';
+      try {
+        const data = await apiRequest('/console/dm-recipient-candidates?limit=50');
+        renderDmCandidateList(list, data.candidates || []);
+      } catch (error) {
+        list.innerHTML = `<div class="empty">${escapeHtml(error.message)}</div>`;
+      }
+    }
+
+    function bindDmRecipientList(scope) {
+      const textarea = scope.querySelector('[data-field="usernames"]');
+      if (!textarea) return;
+
+      scope.querySelector('[data-load-dm-candidates]')?.addEventListener('click', () => loadDmRecipientCandidates(scope));
+      scope.addEventListener('change', (event) => {
+        const input = event.target.closest('[data-dm-candidate]');
+        if (!input || !input.checked) return;
+        setUsernameList(textarea, [...usernameList(textarea.value), input.dataset.dmCandidate]);
+      });
+      loadDmRecipientCandidates(scope);
+    }
+
     function renderSettings(selected) {
       if (selected.id === 'accounts') {
         renderAccountManagement();
@@ -1537,6 +1620,7 @@
         });
       });
       bindAccountPicker(els.settingsPanel);
+      if (selected.id === 'sendDM') bindDmRecipientList(els.settingsPanel);
 
       document.getElementById('execute-btn').addEventListener('click', () => executeFeature(selected));
     }
@@ -1935,6 +2019,7 @@
     function summarizeConfig(config) {
       if (!config) return '';
       if (config.targetUsername) return `@${config.targetUsername}`;
+      if (config.recipientCount) return `送信先 ${config.recipientCount}件`;
       if (config.username) return `@${config.username}`;
       if (config.tweetUrl) return config.tweetUrl;
       if (config.query) return config.query;
