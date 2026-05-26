@@ -175,6 +175,7 @@ function auditStaticAcceptance() {
       'encryptedCookie: encrypt(account.cookie)',
       'evaluateLiveReadiness',
       "XACTIONS_ACCEPTANCE_REQUIRE_LIVE = 'true'",
+      "XACTIONS_LIVE_USE_EXISTING_ACCOUNTS ||= 'true'",
       'read -rsp "$prompt"',
       'docker exec -i',
       'register-console-live-accounts-host.sh',

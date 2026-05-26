@@ -325,6 +325,7 @@ describe('console scheduler helpers', () => {
     expect(registerScript).not.toContain('console.log(account.cookie');
     expect(registerScript).not.toContain('console.log(cookie');
     expect(liveAcceptance).toContain("XACTIONS_ACCEPTANCE_REQUIRE_LIVE = 'true'");
+    expect(liveAcceptance).toContain("XACTIONS_LIVE_USE_EXISTING_ACCOUNTS ||= 'true'");
     expect(liveAcceptance).toContain("import('./audit-console-acceptance.js')");
     expect(hostScript).toContain('read -rsp "$prompt"');
     expect(hostScript).toContain('docker exec -i');
