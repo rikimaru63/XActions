@@ -1216,6 +1216,13 @@ class BrowserAutomation {
     const clean = cleanUsername(username);
     const text = String(message || '').trim();
     const chatPasscode = String(options.chatPasscode || '').trim();
+    const composerSelector = [
+      '[data-testid="dmComposerTextInput"]',
+      '[data-testid="dm-composer-text-input"]',
+      '[data-testid="dm-composer-textarea"]',
+      'textarea[data-testid="dm-composer-textarea"]',
+      '[role="textbox"][contenteditable="true"]',
+    ].join(', ');
     if (!clean) throw new Error('Target username is required');
     if (!text) throw new Error('DM message is required');
 
@@ -1308,43 +1315,49 @@ class BrowserAutomation {
       };
     }
 
-    const nextClicked = await page.evaluate(() => {
-      const scope = document.querySelector('[role="dialog"], [aria-modal="true"]') || document;
-      const buttons = Array.from(scope.querySelectorAll('button'));
-      const next = buttons.find((button) => {
-        const testId = button.getAttribute('data-testid') || '';
-        const label = (button.getAttribute('aria-label') || '').trim();
-        const text = (button.textContent || '').trim();
-        return !button.disabled && (
-          testId === 'nextButton' ||
-          /^Next$/i.test(text) ||
-          text === '次へ' ||
-          /^Next$/i.test(label) ||
-          label === '次へ'
-        );
+    let input = await page.waitForSelector(composerSelector, { timeout: 2500 }).catch(() => null);
+    if (!input) {
+      const nextClicked = await page.evaluate(() => {
+        const scope = document.querySelector('[role="dialog"], [aria-modal="true"]') || document;
+        const buttons = Array.from(scope.querySelectorAll('button'));
+        const next = buttons.find((button) => {
+          const testId = button.getAttribute('data-testid') || '';
+          const label = (button.getAttribute('aria-label') || '').trim();
+          const text = (button.textContent || '').trim();
+          return !button.disabled && (
+            testId === 'nextButton' ||
+            /^Next$/i.test(text) ||
+            text === '\u6b21\u3078' ||
+            text === '次へ' ||
+            /^Next$/i.test(label) ||
+            label === '\u6b21\u3078' ||
+            label === '次へ'
+          );
+        });
+        if (!next) return false;
+        next.click();
+        return true;
       });
-      if (!next) return false;
-      next.click();
-      return true;
-    });
 
-    if (!nextClicked) {
-      const closedAfterNext = await page.evaluate(() => /inbox is closed|update their message settings/i.test(document.body.innerText || ''))
-        .catch(() => false);
-      if (closedAfterNext) {
-        return {
-          success: false,
-          username: clean,
-          error: 'DM recipient inbox is closed',
-        };
+      if (!nextClicked) {
+        const closedAfterNext = await page.evaluate(() => /inbox is closed|update their message settings/i.test(document.body.innerText || ''))
+          .catch(() => false);
+        if (closedAfterNext) {
+          return {
+            success: false,
+            username: clean,
+            error: 'DM recipient inbox is closed',
+          };
+        }
+        input = await page.waitForSelector(composerSelector, { timeout: 1500 }).catch(() => null);
+        if (!input) {
+          return { success: false, username: clean, error: 'DM next button was not found' };
+        }
       }
-      return { success: false, username: clean, error: 'DM next button was not found' };
     }
-
-    const input = await page.waitForSelector(
-      '[data-testid="dmComposerTextInput"], [data-testid="dm-composer-text-input"], [role="textbox"][contenteditable="true"]',
-      { timeout: 20000 }
-    ).catch(() => null);
+    if (!input) {
+      input = await page.waitForSelector(composerSelector, { timeout: 20000 }).catch(() => null);
+    }
     if (!input) {
       return { success: false, username: clean, error: 'DM composer was not available' };
     }
