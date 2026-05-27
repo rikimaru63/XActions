@@ -1212,19 +1212,20 @@ class BrowserAutomation {
     return { username: clean, ...result };
   }
 
-  async sendDM(page, username, message) {
+  async sendDM(page, username, message, options = {}) {
     const clean = cleanUsername(username);
     const text = String(message || '').trim();
+    const chatPasscode = String(options.chatPasscode || '').trim();
     if (!clean) throw new Error('Target username is required');
     if (!text) throw new Error('DM message is required');
 
-    await this.navigateToTwitter(page, 'https://x.com/messages');
+    await this.navigateToTwitter(page, 'https://x.com/i/chat');
 
-    const passcodeRequired = await page.evaluate(() => (
+    const setupRequired = await page.evaluate(() => (
       location.pathname.includes('/i/chat/pin/new') ||
       Boolean(document.querySelector('[data-testid="pin-onboarding-setup-now"]'))
     )).catch(() => false);
-    if (passcodeRequired) {
+    if (setupRequired) {
       return {
         success: false,
         username: clean,
@@ -1232,23 +1233,59 @@ class BrowserAutomation {
       };
     }
 
-    await this.navigateToTwitter(page, 'https://x.com/messages/compose');
+    const unlockRequired = await page.$('[data-testid="pin-code-input-container"]');
+    if (unlockRequired) {
+      if (!chatPasscode) {
+        return {
+          success: false,
+          username: clean,
+          error: 'X chat passcode is required before sending DMs',
+        };
+      }
+      const firstPinInput = await page.$('[data-testid="pin-code-input-container"] input');
+      if (firstPinInput) await firstPinInput.click();
+      await page.keyboard.type(chatPasscode, { delay: 80 });
+      await page.keyboard.press('Enter');
+      const unlocked = await page.waitForSelector(
+        '[data-testid="dm-new-chat-button"], [data-testid="dm-empty-conversation-new-chat-button"]',
+        { timeout: 20000 }
+      ).then(() => true).catch(() => false);
+      if (!unlocked) {
+        return {
+          success: false,
+          username: clean,
+          error: 'X chat passcode was not accepted',
+        };
+      }
+    }
 
-    const searchInput = await page.waitForSelector(
-      '[data-testid="searchPeople"], [role="dialog"] input[data-testid="SearchBox_Search_Input"], [aria-modal="true"] input[data-testid="SearchBox_Search_Input"]',
-      { timeout: 20000 }
-    ).catch(() => null);
+    const newChatButton = await page.$('[data-testid="dm-new-chat-button"]')
+      || await page.$('[data-testid="dm-empty-conversation-new-chat-button"]');
+    if (newChatButton) {
+      await newChatButton.click();
+      await randomDelay(800, 1400);
+    } else {
+      await this.navigateToTwitter(page, 'https://x.com/messages/compose');
+    }
+
+    let searchInput = await page.waitForSelector('[data-testid="new-dm-search-input"]', { timeout: 10000 }).catch(() => null);
+    if (!searchInput) {
+      searchInput = await page.waitForSelector(
+        '[data-testid="searchPeople"], [role="dialog"] input[data-testid="SearchBox_Search_Input"], [aria-modal="true"] input[data-testid="SearchBox_Search_Input"]',
+        { timeout: 10000 }
+      ).catch(() => null);
+    }
     if (!searchInput) {
       return { success: false, username: clean, error: 'DM recipient search was not available' };
     }
 
     await searchInput.click({ clickCount: 3 });
     await page.keyboard.type(clean, { delay: 35 });
-    await randomDelay(1500, 2500);
+    await randomDelay(2500, 4000);
 
     const selected = await page.evaluate((targetUsername) => {
       const scope = document.querySelector('[role="dialog"], [aria-modal="true"]') || document;
-      const users = Array.from(scope.querySelectorAll('[data-testid="TypeaheadUser"], [data-testid="UserCell"], div[role="option"]'));
+      const users = Array.from(scope.querySelectorAll('[data-testid^="new-dm-user-suggestion"], [data-testid="TypeaheadUser"], [data-testid="UserCell"], div[role="option"]'));
       const target = users.find((user) => (user.textContent || '').toLowerCase().includes(`@${targetUsername.toLowerCase()}`)) || users[0];
       if (!target) return false;
       target.click();
@@ -1256,7 +1293,7 @@ class BrowserAutomation {
     }, clean);
 
     if (!selected) {
-      return { success: false, username: clean, error: 'DM recipient was not found' };
+      return { success: false, username: clean, error: 'DM recipient was not found or cannot receive messages' };
     }
 
     await randomDelay(800, 1400);
@@ -1285,7 +1322,10 @@ class BrowserAutomation {
       return { success: false, username: clean, error: 'DM next button was not found' };
     }
 
-    const input = await page.waitForSelector('[data-testid="dmComposerTextInput"]', { timeout: 20000 }).catch(() => null);
+    const input = await page.waitForSelector(
+      '[data-testid="dmComposerTextInput"], [data-testid="dm-composer-text-input"], [role="textbox"][contenteditable="true"]',
+      { timeout: 20000 }
+    ).catch(() => null);
     if (!input) {
       return { success: false, username: clean, error: 'DM composer was not available' };
     }
@@ -1295,7 +1335,12 @@ class BrowserAutomation {
     await randomDelay(500, 1000);
 
     const sendClicked = await page.evaluate(() => {
-      const send = document.querySelector('[data-testid="dmComposerSendButton"]');
+      const send = document.querySelector('[data-testid="dmComposerSendButton"], [data-testid="dm-composer-send-button"]')
+        || Array.from(document.querySelectorAll('button')).find((button) => {
+          const label = button.getAttribute('aria-label') || '';
+          const text = button.textContent || '';
+          return !button.disabled && (/Send/i.test(label) || label === '送信' || text === '送信');
+        });
       if (!send) return false;
       send.click();
       return true;

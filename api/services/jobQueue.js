@@ -1626,7 +1626,9 @@ operationsQueue.process('sendDM', 1, async (job) => {
         if (isJobCancelled(job.data.operationId)) break;
 
         await job.progress(`Sending DM ${index + 1}/${recipients.length} to @${username}`);
-        const result = await browserAutomation.sendDM(page, username, config.message);
+        const result = await browserAutomation.sendDM(page, username, config.message, {
+          chatPasscode: config.chatPasscode || config.xChatPasscode || process.env.XACTIONS_X_CHAT_PASSCODE,
+        });
         if (result.success) {
           sent.push({ username, sent: true });
         } else {

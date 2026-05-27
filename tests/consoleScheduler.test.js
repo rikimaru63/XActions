@@ -1045,10 +1045,13 @@ describe('console scheduler helpers', () => {
 
   it('keeps DM sending focused and caps user-authored DM bodies server-side', () => {
     const sendDm = getFeatureById('sendDM');
-    expect(sendDm.fields.map((field) => field.key)).toEqual(['usernames', 'message']);
+    expect(sendDm.fields.map((field) => field.key)).toEqual(['usernames', 'message', 'chatPasscode']);
     expect(sendDm.fields.find((field) => field.key === 'usernames')).toMatchObject({
       type: 'usernameList',
       source: 'newFollowers',
+    });
+    expect(sendDm.fields.find((field) => field.key === 'chatPasscode')).toMatchObject({
+      type: 'password',
     });
 
     const longMessage = '長'.repeat(numberFieldMax('sendDM', 'message') + 50);
@@ -1058,9 +1061,18 @@ describe('console scheduler helpers', () => {
       'live'
     );
     expect(payload.operationConfig.recipientCount).toBe(2);
+    expect(payload.operationConfig.hasChatPasscode).toBe(false);
     expect(payload.jobConfig.usernames).toEqual(['target_user', 'second_user']);
     expect(payload.operationConfig.messageLength).toBe(numberFieldMax('sendDM', 'message'));
     expect(payload.jobConfig.message).toHaveLength(numberFieldMax('sendDM', 'message'));
+
+    const passcodePayload = createActionPayload(
+      sendDm,
+      { usernames: '@target_user', message: 'hello', chatPasscode: '1357' },
+      'live'
+    );
+    expect(passcodePayload.operationConfig.hasChatPasscode).toBe(true);
+    expect(passcodePayload.jobConfig.chatPasscode).toBe('1357');
 
     const engage = createActionPayload(
       getFeatureById('targetEngage'),

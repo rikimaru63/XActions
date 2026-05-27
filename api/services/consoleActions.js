@@ -5,6 +5,7 @@ const hiddenConfigKeys = new Set([
   'comments',
   'cookie',
   'dmMessage',
+  'chatPasscode',
   'encryptedRetryConfig',
   'message',
   'options',
@@ -18,6 +19,7 @@ const hiddenConfigKeys = new Set([
   'textPreview',
   'token',
   'tweets',
+  'xChatPasscode',
   'usernames',
 ]);
 
@@ -150,6 +152,7 @@ function createActionPayload(feature, inputConfig, mode = 'dryRun', user = {}) {
 
       const usernames = normalizeUsernameList(config.usernames || config.recipients || config.username);
       const dmMessage = String(config.message || '').trim().slice(0, MAX_DM_MESSAGE_LENGTH);
+      const chatPasscode = String(config.chatPasscode || config.xChatPasscode || '').trim().slice(0, 32);
 
       if (!usernames.length) throw new Error('送信先を入力してください。');
       if (!dmMessage) throw new Error('本文を入力してください。');
@@ -160,12 +163,14 @@ function createActionPayload(feature, inputConfig, mode = 'dryRun', user = {}) {
           sourceFeatureId: feature.id,
           recipientCount: usernames.length,
           hasMessage: true,
+          hasChatPasscode: !!chatPasscode,
           messageLength: dmMessage.length,
         },
         jobConfig: {
           usernames,
           username: usernames[0],
           message: dmMessage,
+          ...(chatPasscode ? { chatPasscode } : {}),
           dryRun: false,
         },
       };

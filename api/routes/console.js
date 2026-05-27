@@ -68,6 +68,7 @@ function configFromOperation(featureId, operationConfig = {}, overrideConfig = {
     return {
       usernames: config.usernames || config.recipients || config.username || config.targetUsername,
       message: config.message || config.dmMessage,
+      chatPasscode: config.chatPasscode || config.xChatPasscode,
       delayMs: config.delayMs,
     };
   }

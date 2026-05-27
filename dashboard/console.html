@@ -1525,7 +1525,7 @@
           <label for="field-${escapeHtml(field.key)}">${escapeHtml(field.label)}${field.suffix ? ` (${escapeHtml(field.suffix)})` : ''}</label>
           <input id="field-${escapeHtml(field.key)}"
             data-field="${escapeHtml(field.key)}"
-            type="${field.type === 'number' ? 'number' : 'text'}"
+            type="${field.type === 'number' ? 'number' : field.type === 'password' ? 'password' : 'text'}"
             min="${field.min ?? ''}"
             max="${field.max ?? ''}"
             step="${field.step ?? ''}"

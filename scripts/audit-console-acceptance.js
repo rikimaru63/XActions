@@ -283,7 +283,7 @@ function auditStaticAcceptance() {
     "['priceCorrelation', ['tweets']]",
     "['agentCommand', ['text']]",
     "['runWorkflow', ['context']]",
-    "['sendDM', ['message', 'username', 'usernames', 'recipients']]",
+    "['sendDM', ['message', 'username', 'usernames', 'recipients', 'chatPasscode', 'xChatPasscode']]",
     "['targetEngage', ['dmMessage']]",
     'encryptedJobConfig',
     'sensitiveQueueKeys',

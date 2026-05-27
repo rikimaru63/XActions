@@ -82,6 +82,7 @@ const features = [
     fields: [
       { key: 'usernames', label: '送信先リスト', type: 'usernameList', required: true, placeholder: '@username\n@username2', source: 'newFollowers' },
       { key: 'message', label: '本文', type: 'textarea', required: true, max: 1000 },
+      { key: 'chatPasscode', label: 'Xチャットパスコード', type: 'password', placeholder: '必要な場合のみ入力' },
     ],
   },
   {
