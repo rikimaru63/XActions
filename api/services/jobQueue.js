@@ -1638,6 +1638,11 @@ operationsQueue.process('sendDM', 1, async (job) => {
         }
       }
 
+      if (failed.length && sent.length === 0) {
+        const firstFailure = failed[0];
+        throw new Error(firstFailure?.error || 'All DM sends failed');
+      }
+
       return {
         success: failed.length === 0,
         totalRecipients: recipients.length,
