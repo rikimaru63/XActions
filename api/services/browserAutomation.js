@@ -1218,10 +1218,24 @@ class BrowserAutomation {
     if (!clean) throw new Error('Target username is required');
     if (!text) throw new Error('DM message is required');
 
+    await this.navigateToTwitter(page, 'https://x.com/messages');
+
+    const passcodeRequired = await page.evaluate(() => (
+      location.pathname.includes('/i/chat/pin/new') ||
+      Boolean(document.querySelector('[data-testid="pin-onboarding-setup-now"]'))
+    )).catch(() => false);
+    if (passcodeRequired) {
+      return {
+        success: false,
+        username: clean,
+        error: 'X chat passcode setup is required before sending DMs',
+      };
+    }
+
     await this.navigateToTwitter(page, 'https://x.com/messages/compose');
 
     const searchInput = await page.waitForSelector(
-      '[data-testid="searchPeople"], input[data-testid="SearchBox_Search_Input"], input[aria-label*="Search"]',
+      '[data-testid="searchPeople"], [role="dialog"] input[data-testid="SearchBox_Search_Input"], [aria-modal="true"] input[data-testid="SearchBox_Search_Input"]',
       { timeout: 20000 }
     ).catch(() => null);
     if (!searchInput) {
@@ -1233,7 +1247,8 @@ class BrowserAutomation {
     await randomDelay(1500, 2500);
 
     const selected = await page.evaluate((targetUsername) => {
-      const users = Array.from(document.querySelectorAll('[data-testid="TypeaheadUser"], [data-testid="UserCell"]'));
+      const scope = document.querySelector('[role="dialog"], [aria-modal="true"]') || document;
+      const users = Array.from(scope.querySelectorAll('[data-testid="TypeaheadUser"], [data-testid="UserCell"], div[role="option"]'));
       const target = users.find((user) => (user.textContent || '').toLowerCase().includes(`@${targetUsername.toLowerCase()}`)) || users[0];
       if (!target) return false;
       target.click();
@@ -1247,11 +1262,19 @@ class BrowserAutomation {
     await randomDelay(800, 1400);
 
     const nextClicked = await page.evaluate(() => {
-      const buttons = Array.from(document.querySelectorAll('button'));
+      const scope = document.querySelector('[role="dialog"], [aria-modal="true"]') || document;
+      const buttons = Array.from(scope.querySelectorAll('button'));
       const next = buttons.find((button) => {
         const testId = button.getAttribute('data-testid') || '';
+        const label = (button.getAttribute('aria-label') || '').trim();
         const text = (button.textContent || '').trim();
-        return testId === 'nextButton' || /^Next$/i.test(text);
+        return !button.disabled && (
+          testId === 'nextButton' ||
+          /^Next$/i.test(text) ||
+          text === '次へ' ||
+          /^Next$/i.test(label) ||
+          label === '次へ'
+        );
       });
       if (!next) return false;
       next.click();
