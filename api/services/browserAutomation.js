@@ -1298,6 +1298,16 @@ class BrowserAutomation {
 
     await randomDelay(800, 1400);
 
+    const inboxClosed = await page.evaluate(() => /inbox is closed|update their message settings/i.test(document.body.innerText || ''))
+      .catch(() => false);
+    if (inboxClosed) {
+      return {
+        success: false,
+        username: clean,
+        error: 'DM recipient inbox is closed',
+      };
+    }
+
     const nextClicked = await page.evaluate(() => {
       const scope = document.querySelector('[role="dialog"], [aria-modal="true"]') || document;
       const buttons = Array.from(scope.querySelectorAll('button'));
@@ -1319,6 +1329,15 @@ class BrowserAutomation {
     });
 
     if (!nextClicked) {
+      const closedAfterNext = await page.evaluate(() => /inbox is closed|update their message settings/i.test(document.body.innerText || ''))
+        .catch(() => false);
+      if (closedAfterNext) {
+        return {
+          success: false,
+          username: clean,
+          error: 'DM recipient inbox is closed',
+        };
+      }
       return { success: false, username: clean, error: 'DM next button was not found' };
     }
 
